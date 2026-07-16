@@ -20,13 +20,13 @@ git config --global user.email "mcgregorymacias12@gmail.com"
    cd "G:\My Drive\Trabajo\Clientes\McGregor\Proyecto"
    git init
    git add .
-   git commit -m "Sistema de gestión de envíos"
+   git commit -m "Sistema de gestion de envios"
    ```
    ```bash
    cd "C:\Users\Mcgregory\Documents\Proyecto"
    git init
    git add .
-   git commit -m "Sistema de gestión de envíos"
+   git commit -m "Sistema gestion de envios"
    ```
 2. En https://github.com crea un repositorio **privado** (es de un cliente), sin
    inicializarlo con README. Copia la URL que te da.
