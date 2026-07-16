@@ -8,3 +8,4 @@ __pycache__/
 
 # Assets vendorizados (se regeneran con descargar_assets.py)
 static/vendor/
+".claude/settings.local.json" 

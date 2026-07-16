@@ -22,7 +22,12 @@ git config --global user.email "mcgregorymacias12@gmail.com"
    git add .
    git commit -m "Sistema de gestión de envíos"
    ```
-
+   ```bash
+   cd "C:\Users\Mcgregory\Documents\Proyecto"
+   git init
+   git add .
+   git commit -m "Sistema de gestión de envíos"
+   ```
 2. En https://github.com crea un repositorio **privado** (es de un cliente), sin
    inicializarlo con README. Copia la URL que te da.
 
@@ -50,7 +55,7 @@ git config --global user.email "mcgregorymacias12@gmail.com"
 
    ```bash
    cd C:\proyectos
-   git clone https://github.com/TU-USUARIO/TU-REPO.git logistica
+   git clone https://github.com/mcgregory-creator/tesis.git logistica
    cd logistica
    ```
 
