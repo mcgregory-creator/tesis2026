@@ -12,7 +12,6 @@ static/vendor/
 ".claude/"
 .env - Copy.example
 CORRECIONES.md
-descargar_assets.py
 MEJORAS.md
 MIGRACION.md
 README - Copy.md
