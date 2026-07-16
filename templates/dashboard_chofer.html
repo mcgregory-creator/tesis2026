@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+
+{% block title %}Ruta Activa{% endblock %}
+
+{% block content %}
+{% if ruta %}
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body text-center">
+            <h5 class="text-muted">Destino Asignado</h5>
+            <h2 class="mb-3">{{ ruta['destino'] }}</h2>
+            {% if ruta['estado_envio'] == 'En Ruta' %}
+                <span class="badge bg-primary fs-6">Estatus: En Curso</span>
+            {% else %}
+                <span class="badge bg-warning text-dark fs-6">Estatus: Pendiente por Iniciar</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div id="alerta-js" class="alert d-none" role="alert"></div>
+
+    <h4 class="mb-3">Acciones de la Ruta</h4>
+    <div class="d-grid gap-3">
+        <button
+            id="btnIniciar"
+            class="btn btn-primary btn-ruta"
+            onclick="enviarSimple('Salida')"
+            {% if ruta['estado_envio'] != 'Pendiente' %}disabled{% endif %}
+        >🟢 INICIAR RUTA</button>
+
+        <button
+            class="btn btn-info text-white btn-ruta"
+            data-bs-toggle="modal" data-bs-target="#modalActualizar"
+            {% if ruta['estado_envio'] != 'En Ruta' %}disabled{% endif %}
+        >📝 ACTUALIZAR (Gasolina / Peaje / Falla)</button>
+
+        <button
+            id="btnFinalizar"
+            class="btn btn-success btn-ruta mt-3"
+            onclick="enviarSimple('Llegada')"
+            {% if ruta['estado_envio'] != 'En Ruta' %}disabled{% endif %}
+        >✅ FINALIZAR RUTA (LLEGADA)</button>
+    </div>
+
+    <!-- ============ MODAL ACTUALIZAR ============ -->
+    <div class="modal fade" id="modalActualizar" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">Actualizar Ruta</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-pills nav-fill mb-3">
+                        <li class="nav-item">
+                            <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#panelGasolina" type="button">⛽ Gasolina</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#panelPeaje" type="button">🛣️ Peaje</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-bs-toggle="pill" data-bs-target="#panelFalla" type="button">⚠️ Falla</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="panelGasolina">
+                            <div class="mb-2">
+                                <label class="form-label">Litros cargados</label>
+                                <input type="number" step="0.01" min="0.01" class="form-control" id="gasLitros">
+                            </div>
+                            <div class="row">
+                                <div class="col-6 mb-2">
+                                    <label class="form-label">Precio por litro ($)</label>
+                                    <input type="number" step="0.01" min="0" class="form-control" id="gasPrecioLitro">
+                                </div>
+                                <div class="col-6 mb-2">
+                                    <label class="form-label">Precio total ($)</label>
+                                    <input type="number" step="0.01" min="0" class="form-control" id="gasPrecioTotal">
+                                </div>
+                            </div>
+                            <p class="text-muted small">
+                                Completa los litros y uno de los dos precios: el otro se calcula
+                                automáticamente.
+                            </p>
+                            <button type="button" class="btn btn-info text-white w-100" onclick="enviarGasolina()">
+                                Guardar Gasolina
+                            </button>
+                        </div>
+
+                        <div class="tab-pane fade" id="panelPeaje">
+                            <div class="mb-2">
+                                <label class="form-label">Nombre del peaje</label>
+                                <input type="text" class="form-control" id="peajeNombre">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Monto a pagar ($)</label>
+                                <input type="number" step="0.01" min="0.01" class="form-control" id="peajeMonto">
+                            </div>
+                            <button type="button" class="btn btn-secondary w-100" onclick="enviarPeaje()">
+                                Guardar Peaje
+                            </button>
+                        </div>
+
+                        <div class="tab-pane fade" id="panelFalla">
+                            <div class="mb-2">
+                                <label class="form-label">Descripción de la falla</label>
+                                <textarea class="form-control" id="fallaDescripcion" rows="2"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Monto de la falla ($)</label>
+                                <input type="number" step="0.01" min="0.01" class="form-control" id="fallaMonto">
+                            </div>
+                            <button type="button" class="btn btn-warning w-100" onclick="enviarFalla()">
+                                Guardar Falla
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-info text-center mt-5">
+        <h4>Sin Rutas Activas</h4>
+        <p>No tienes despachos pendientes en este momento.</p>
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if ruta %}
+<script>
+    const idEnvioActual = {{ ruta['id_envio'] }};
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+
+    function mostrarAlerta(mensaje, esError) {
+        const caja = document.getElementById('alerta-js');
+        caja.className = `alert ${esError ? 'alert-danger' : 'alert-success'}`;
+        caja.innerText = mensaje;
+        caja.classList.remove('d-none');
+        setTimeout(() => caja.classList.add('d-none'), 4000);
+    }
+
+    async function enviarEvento(tipo, extra) {
+        try {
+            const respuesta = await fetch('/api/incidencia', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': CSRF_TOKEN
+                },
+                body: JSON.stringify(Object.assign({
+                    id_envio: idEnvioActual,
+                    tipo_evento: tipo,
+                }, extra)),
+            });
+
+            const data = await respuesta.json();
+            if (respuesta.ok) {
+                mostrarAlerta(data.mensaje, false);
+                const modalEl = document.getElementById('modalActualizar');
+                const modalAbierto = modalEl && bootstrap.Modal.getInstance(modalEl);
+                if (modalAbierto) modalAbierto.hide();
+                setTimeout(() => window.location.reload(), 1200);
+            } else {
+                mostrarAlerta(data.error, true);
+            }
+        } catch (error) {
+            mostrarAlerta("Error de conexión a la red local.", true);
+        }
+    }
+
+    function enviarSimple(tipo) {
+        enviarEvento(tipo, {});
+    }
+
+    function enviarGasolina() {
+        const litros = parseFloat(document.getElementById('gasLitros').value);
+        const precioLitroInput = document.getElementById('gasPrecioLitro').value;
+        const precioTotalInput = document.getElementById('gasPrecioTotal').value;
+        let precioLitro = parseFloat(precioLitroInput);
+        let precioTotal = parseFloat(precioTotalInput);
+
+        if (isNaN(litros) || litros <= 0) {
+            mostrarAlerta("Ingresa los litros cargados.", true);
+            return;
+        }
+        if (isNaN(precioTotal) && !isNaN(precioLitro)) {
+            precioTotal = litros * precioLitro;
+        }
+        if (isNaN(precioTotal) || precioTotal <= 0) {
+            mostrarAlerta("Ingresa el precio por litro o el precio total.", true);
+            return;
+        }
+        enviarEvento('Gasolina', { cantidad: litros, precio: precioTotal });
+    }
+
+    function enviarPeaje() {
+        const nombre = document.getElementById('peajeNombre').value.trim();
+        const monto = parseFloat(document.getElementById('peajeMonto').value);
+
+        if (!nombre) {
+            mostrarAlerta("Ingresa el nombre del peaje.", true);
+            return;
+        }
+        if (isNaN(monto) || monto <= 0) {
+            mostrarAlerta("Ingresa un monto válido.", true);
+            return;
+        }
+        enviarEvento('Peaje', { descripcion: nombre, precio: monto });
+    }
+
+    function enviarFalla() {
+        const descripcion = document.getElementById('fallaDescripcion').value.trim();
+        const monto = parseFloat(document.getElementById('fallaMonto').value);
+
+        if (!descripcion) {
+            mostrarAlerta("Describe la falla mecánica.", true);
+            return;
+        }
+        if (isNaN(monto) || monto <= 0) {
+            mostrarAlerta("Ingresa un monto válido.", true);
+            return;
+        }
+        enviarEvento('Novedad', { descripcion: descripcion, precio: monto });
+    }
+
+    // Recalcular el precio contrario al que el chofer va llenando, para que
+    // ambos campos siempre queden consistentes entre sí.
+    document.getElementById('gasPrecioLitro').addEventListener('input', function () {
+        const litros = parseFloat(document.getElementById('gasLitros').value);
+        const precioLitro = parseFloat(this.value);
+        if (!isNaN(litros) && litros > 0 && !isNaN(precioLitro)) {
+            document.getElementById('gasPrecioTotal').value = (litros * precioLitro).toFixed(2);
+        }
+    });
+    document.getElementById('gasPrecioTotal').addEventListener('input', function () {
+        const litros = parseFloat(document.getElementById('gasLitros').value);
+        const precioTotal = parseFloat(this.value);
+        if (!isNaN(litros) && litros > 0 && !isNaN(precioTotal)) {
+            document.getElementById('gasPrecioLitro').value = (precioTotal / litros).toFixed(2);
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

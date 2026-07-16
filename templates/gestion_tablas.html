@@ -1,0 +1,418 @@
+{% extends 'base.html' %}
+
+{% block title %}Gestión de Tablas{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Tablas de Sistema</h2>
+    <p class="text-muted">Administración y consulta de registros.</p>
+
+    <ul class="nav nav-tabs mb-4" id="misTablas" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#choferes" type="button">Choferes</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#vehiculos" type="button">Vehículos</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#rutas" type="button">Envíos/Rutas</button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="misTablasContent">
+
+        <div class="tab-pane fade show active" id="choferes">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre Completo</th>
+                            <th>Usuario</th>
+                            <th>Licencia (Vence)</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ch in choferes %}
+                        <tr>
+                            <td>{{ ch['id_usuario'] }}</td>
+                            <td>{{ ch['nombre_completo'] }}</td>
+                            <td>{{ ch['usuario'] }}</td>
+                            <td>{{ ch['vencimiento_licencia'] or '—' }}</td>
+                            <td>
+                                {% if ch['estado'] == 'Activo' %}
+                                    <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ ch['estado'] }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditarChofer{{ ch['id_usuario'] }}">
+                                    Editar
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-center text-muted">Sin choferes registrados.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="vehiculos">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Placa</th>
+                            <th>Modelo</th>
+                            <th>Capacidad (KG)</th>
+                            <th>Km x Litro</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in vehiculos %}
+                        <tr>
+                            <td>{{ v['placa'] }}</td>
+                            <td>{{ v['modelo'] }}</td>
+                            <td>{{ v['capacidad_carga'] or '—' }}</td>
+                            <td>{{ v['km_por_litro'] }}</td>
+                            <td>
+                                {% if v['estado'] == 'Disponible' %}
+                                    <span class="badge bg-success">Disponible</span>
+                                {% elif v['estado'] == 'Asignado' %}
+                                    <span class="badge bg-warning text-dark">Asignado</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ v['estado'] }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditarVehiculo{{ v['id_vehiculo'] }}">
+                                    Editar
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-center text-muted">Sin vehículos registrados.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="rutas">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID Envío</th>
+                            <th>Cliente</th>
+                            <th>Vehículo</th>
+                            <th>Chofer</th>
+                            <th>Destino</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in envios %}
+                        <tr>
+                            <td>{{ e['id_envio'] }}</td>
+                            <td>{{ e['cliente'] }}</td>
+                            <td>{{ e['vehiculo'] }}</td>
+                            <td>{{ e['chofer'] }}</td>
+                            <td>{{ e['destino'] }}</td>
+                            <td>
+                                {% if e['estado_envio'] == 'Pendiente' %}
+                                    <span class="badge bg-warning text-dark">Asignado</span>
+                                {% elif e['estado_envio'] == 'En Ruta' %}
+                                    <span class="badge bg-primary">En Ruta</span>
+                                {% elif e['estado_envio'] == 'Entregado' %}
+                                    <span class="badge bg-success">Entregado</span>
+                                {% elif e['estado_envio'] == 'Anulado' %}
+                                    <span class="badge bg-dark">Anulado</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ e['estado_envio'] }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-nowrap">
+                                <a href="{{ url_for('ver_envio', id_envio=e['id_envio']) }}" class="btn btn-sm btn-outline-secondary">
+                                    Ver
+                                </a>
+                                {% if e['estado_envio'] in estados_editables %}
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditarEnvio{{ e['id_envio'] }}">
+                                    Editar
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalAnularEnvio{{ e['id_envio'] }}">
+                                    Anular
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="text-center text-muted">Sin envíos registrados.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ MODALES DE EDICIÓN: CHOFERES ============ -->
+{% for ch in choferes %}
+<div class="modal fade" id="modalEditarChofer{{ ch['id_usuario'] }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Editar Chofer — {{ ch['nombre_completo'] }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('editar_chofer', id_usuario=ch['id_usuario']) }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nombre Completo</label>
+                            <input type="text" class="form-control" name="nombre_completo" value="{{ ch['nombre_completo'] }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Usuario (Login)</label>
+                            <input type="text" class="form-control" name="usuario" value="{{ ch['usuario'] }}" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Estado</label>
+                            <select class="form-select" name="estado">
+                                <option value="Activo" {% if ch['estado'] == 'Activo' %}selected{% endif %}>Activo</option>
+                                <option value="Inactivo" {% if ch['estado'] == 'Inactivo' %}selected{% endif %}>Inactivo</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nueva contraseña (opcional)</label>
+                            <input type="password" class="form-control" name="password" minlength="8" placeholder="Dejar en blanco para no cambiarla">
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="text-muted mb-3">Vencimiento de Documentos Legales</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Licencia</label>
+                            <input type="date" class="form-control" name="vencimiento_licencia" value="{{ ch['vencimiento_licencia'] or '' }}">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Certificado Médico</label>
+                            <input type="date" class="form-control" name="vencimiento_certificado_medico" value="{{ ch['vencimiento_certificado_medico'] or '' }}">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Cédula</label>
+                            <input type="date" class="form-control" name="vencimiento_cedula" value="{{ ch['vencimiento_cedula'] or '' }}">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- ============ MODALES DE EDICIÓN: VEHÍCULOS ============ -->
+{% for v in vehiculos %}
+<div class="modal fade" id="modalEditarVehiculo{{ v['id_vehiculo'] }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Editar Vehículo — {{ v['placa'] }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('editar_vehiculo', id_vehiculo=v['id_vehiculo']) }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Placa</label>
+                            <input type="text" class="form-control text-uppercase" name="placa" value="{{ v['placa'] }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Modelo del Camión</label>
+                            <input type="text" class="form-control" name="modelo" value="{{ v['modelo'] }}" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Capacidad Carga (KG)</label>
+                            <input type="number" step="0.01" class="form-control" name="capacidad_carga" value="{{ v['capacidad_carga'] or '' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Rendimiento (Km/L)</label>
+                            <input type="number" step="0.01" class="form-control" name="km_por_litro" value="{{ v['km_por_litro'] }}" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Costo Mant. x Km ($)</label>
+                            <input type="number" step="0.01" class="form-control" name="costo_mantenimiento_km" value="{{ v['costo_mantenimiento_km'] }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Frecuencia Mant. (Km)</label>
+                            <input type="number" class="form-control" name="km_para_mantenimiento" value="{{ v['km_para_mantenimiento'] }}" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Vencimiento RCV</label>
+                            <input type="date" class="form-control" name="vencimiento_rcv" value="{{ v['vencimiento_rcv'] or '' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Impuesto Alcaldía</label>
+                            <input type="date" class="form-control" name="vencimiento_impuesto_alcaldia" value="{{ v['vencimiento_impuesto_alcaldia'] or '' }}">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Estado</label>
+                        {% if v['estado'] == 'Asignado' %}
+                            <input type="text" class="form-control" value="Asignado (en ruta activa)" disabled>
+                            <p class="text-muted small mb-0">
+                                No se puede cambiar el estado mientras el vehículo está en una ruta activa.
+                            </p>
+                        {% else %}
+                            <select class="form-select" name="estado">
+                                <option value="Disponible" {% if v['estado'] == 'Disponible' %}selected{% endif %}>Disponible</option>
+                                <option value="Fuera de Servicio" {% if v['estado'] == 'Fuera de Servicio' %}selected{% endif %}>Fuera de Servicio</option>
+                            </select>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- ============ MODALES DE EDICIÓN Y ANULACIÓN: ENVÍOS ============ -->
+{% for e in envios %}
+{% if e['estado_envio'] in estados_editables %}
+<div class="modal fade" id="modalEditarEnvio{{ e['id_envio'] }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fw-bold">Editar Ruta #{{ e['id_envio'] }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('editar_envio', id_envio=e['id_envio']) }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">Cliente</label>
+                            <select class="form-select" name="id_cliente" required>
+                                {% for c in clientes %}
+                                    <option value="{{ c['id_cliente'] }}" {% if c['id_cliente'] == e['id_cliente'] %}selected{% endif %}>
+                                        {{ c['razon_social'] }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Vehículo</label>
+                            <select class="form-select" name="id_vehiculo" required>
+                                {% for v in vehiculos %}
+                                    <option value="{{ v['id_vehiculo'] }}" {% if v['id_vehiculo'] == e['id_vehiculo'] %}selected{% endif %}>
+                                        {{ v['placa'] }} — {{ v['modelo'] }} ({{ v['estado'] }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <p class="text-muted small mb-0">
+                                Si eliges un vehículo distinto, debe estar Disponible y con documentos vigentes.
+                            </p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Chofer</label>
+                            <select class="form-select" name="id_chofer" required>
+                                {% for ch in choferes %}
+                                    <option value="{{ ch['id_usuario'] }}" {% if ch['id_usuario'] == e['id_chofer'] %}selected{% endif %}>
+                                        {{ ch['nombre_completo'] }} ({{ ch['estado'] }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Destino Final</label>
+                            <input type="text" class="form-control" name="destino" value="{{ e['destino'] }}" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Distancia (Km)</label>
+                            <div class="input-group">
+                                <input type="number" step="0.1" min="0.1" class="form-control" name="distancia_km" value="{{ e['distancia_km'] }}" required>
+                                <span class="input-group-text">km</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Costo del Flete (cobrado al cliente)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" step="0.01" min="0.01" class="form-control" name="costo_flete" value="{{ e['costo_flete'] }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Los costos estimados se recalculan automáticamente según el vehículo y la
+                        distancia final.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning fw-bold">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalAnularEnvio{{ e['id_envio'] }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Anular Ruta #{{ e['id_envio'] }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('anular_envio', id_envio=e['id_envio']) }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <p>
+                        ¿Confirmas anular la ruta hacia <strong>{{ e['destino'] }}</strong>?
+                        El vehículo asignado quedará disponible nuevamente. Esta acción no se
+                        puede deshacer.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">Sí, Anular Ruta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}

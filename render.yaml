@@ -1,0 +1,50 @@
+# ==========================================================================
+# Blueprint de Render (https://render.com) para desplegar el sistema completo:
+# una base de datos PostgreSQL gratuita + el servicio web Flask, con las
+# variables de entorno ya cableadas entre ambos.
+#
+# USO
+# --------------------------------------------------------------------------
+#   En Render:  New +  ->  Blueprint  ->  conecta este repositorio de GitHub.
+#   Render leerá este archivo y creará la base de datos y el servicio web.
+#
+# NOTA SOBRE EL PLAN GRATUITO
+# --------------------------------------------------------------------------
+#   La base de datos PostgreSQL gratuita de Render EXPIRA a los 30 días y se
+#   elimina automáticamente: encaja con un uso temporal de 1 mes. El servicio
+#   web gratuito se suspende tras ~15 min sin tráfico y despierta solo en la
+#   siguiente visita (tarda unos segundos la primera vez).
+# ==========================================================================
+databases:
+  - name: logistica-db
+    plan: free
+    databaseName: logistica_db
+    user: logistica
+
+services:
+  - type: web
+    name: logistica-envios
+    runtime: python
+    plan: free
+    # Instala dependencias y descarga Bootstrap/Chart.js a static/vendor
+    # (esa carpeta está en .gitignore, así que se regenera en cada build).
+    buildCommand: "pip install -r requirements.txt && python descargar_assets.py"
+    startCommand: "gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    envVars:
+      # Conexión a la base creada arriba (Render la inyecta automáticamente).
+      - key: DATABASE_URL
+        fromDatabase:
+          name: logistica-db
+          property: connectionString
+      # Clave de firma de cookies: Render genera un valor aleatorio y seguro.
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: FLASK_DEBUG
+        value: "0"
+      # Cookie de sesión solo por HTTPS (Render sirve todo por HTTPS).
+      - key: SESSION_COOKIE_SECURE
+        value: "1"
+      # Contraseña del admin inicial: sync:false = la escribes tú en el panel
+      # de Render al desplegar (no queda en el repositorio).
+      - key: ADMIN_PASSWORD
+        sync: false

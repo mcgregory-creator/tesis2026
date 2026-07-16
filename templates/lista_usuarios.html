@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">{{ titulo }}</h2>
+<div class="table-responsive">
+    <table class="table table-striped table-hover table-bordered align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Nombre Completo</th>
+                <th>Usuario</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in usuarios %}
+            <tr>
+                <td>{{ u['id_usuario'] }}</td>
+                <td>{{ u['nombre_completo'] }}</td>
+                <td>{{ u['usuario'] }}</td>
+                <td>{{ u['rol'] }}</td>
+                <td>
+                    {% if u['estado'] == 'Activo' %}
+                        <span class="badge bg-success">Activo</span>
+                    {% else %}
+                        <span class="badge bg-secondary">{{ u['estado'] }}</span>
+                    {% endif %}
+                </td>
+                <td class="text-nowrap">
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalResetPwd{{ u['id_usuario'] }}">
+                        Resetear Clave
+                    </button>
+                    <form action="{{ url_for('cambiar_estado_usuario', id_usuario=u['id_usuario']) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% if u['estado'] == 'Activo' %}
+                            <input type="hidden" name="estado" value="Inactivo">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary">Desactivar</button>
+                        {% else %}
+                            <input type="hidden" name="estado" value="Activo">
+                            <button type="submit" class="btn btn-sm btn-outline-success">Activar</button>
+                        {% endif %}
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted">Sin registros.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% for u in usuarios %}
+<div class="modal fade" id="modalResetPwd{{ u['id_usuario'] }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Resetear contraseña — {{ u['nombre_completo'] }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('resetear_password', id_usuario=u['id_usuario']) }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label">Nueva contraseña</label>
+                        <input type="password" class="form-control" name="password" minlength="8" required>
+                    </div>
+                    <p class="text-muted small mb-0">Mínimo 8 caracteres. No se pedirá la contraseña anterior.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

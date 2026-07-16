@@ -1,0 +1,12 @@
+# ==========================================================================
+# Imagen de PostgreSQL con el esquema ya incorporado.
+#
+# En lugar de montar schema.sql en runtime (un bind-mount que NO funciona de
+# forma fiable cuando el proyecto vive en Google Drive / unidades virtuales de
+# Windows), se copia dentro de la imagen durante el build. PostgreSQL ejecuta
+# los scripts de /docker-entrypoint-initdb.d/ la PRIMERA vez que arranca con el
+# volumen de datos vacío.
+# ==========================================================================
+FROM postgres:16-alpine
+
+COPY schema.sql /docker-entrypoint-initdb.d/01-schema.sql

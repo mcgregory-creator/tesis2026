@@ -1,0 +1,12 @@
+# Lo que NO debe entrar a la imagen Docker.
+venv/
+.env
+.git/
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+# Los assets vendorizados se regeneran en el build con descargar_assets.py.
+static/vendor/
+# Documentación y respaldos: no hacen falta dentro de la imagen.
+respaldo*.sql

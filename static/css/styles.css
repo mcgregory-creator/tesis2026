@@ -1,0 +1,57 @@
+/* static/css/styles.css */
+
+/* Ajustes globales para consistencia */
+body {
+    background-color: #f4f6f9; /* Un gris muy claro, profesional para sistemas de gestión */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Sombras suaves para las tarjetas del Dashboard */
+.card {
+    border: none;
+    border-radius: 10px;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+}
+
+/* Modificaciones visuales para la tabla de gestión */
+.table-responsive {
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.table th {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Ajustes específicos para los botones gigantes de la vista móvil del chofer */
+.btn-lg {
+    border-radius: 12px;
+    font-weight: bold;
+}
+
+.btn-ruta {
+    height: 80px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    border-radius: 12px;
+}
+
+/* Navegación de pestañas en la sección de tablas */
+.nav-tabs .nav-link {
+    color: #495057;
+    font-weight: 500;
+}
+
+.nav-tabs .nav-link.active {
+    font-weight: bold;
+    color: #0d6efd;
+    border-bottom: 3px solid #0d6efd;
+}

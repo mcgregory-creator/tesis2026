@@ -1,0 +1,65 @@
+# ==========================================================================
+# Levanta TODO el sistema con un solo comando:
+#
+#     docker compose up -d --build
+#
+# Crea dos contenedores:
+#   - db  : PostgreSQL 16. Carga schema.sql automáticamente la primera vez y
+#           guarda los datos en el volumen "pgdata" (persisten entre reinicios).
+#   - web : la app Flask servida con gunicorn. Al arrancar crea el usuario admin.
+#
+# La app queda en  http://localhost:8080  (o el puerto que pongas en WEB_PORT).
+# Los valores sensibles se leen del archivo .env (docker compose lo lee solo).
+# ==========================================================================
+name: logistica
+
+services:
+  db:
+    # Imagen de Postgres con schema.sql horneado (ver Dockerfile.db). El esquema
+    # se carga solo la primera vez, cuando el volumen "pgdata" está vacío.
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-logistica_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-logistica_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    # Para inspeccionar la base con psql/pgAdmin desde el host, descomenta y
+    # elige un puerto libre (evita 5432/5433/5434 si ya los usas):
+    # ports:
+    #   - "5435:5432"
+
+  web:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Dentro de la red de compose, la base siempre está en el host "db":5432.
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-logistica_db}
+      # Obligatoria: firma las cookies de sesión y debe ser la misma en todos
+      # los workers. Si falta, compose se detiene con este mensaje.
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?Define FLASK_SECRET_KEY en el archivo .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      FLASK_DEBUG: "0"
+      # Ponlo en "1" cuando sirvas por HTTPS (detrás de un proxy en el servidor).
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-0}
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

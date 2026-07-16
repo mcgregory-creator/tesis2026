@@ -1,0 +1,628 @@
+{% extends 'base.html' %}
+
+{% block title %}Panel de Administración{% endblock %}
+
+{% block content %}
+    <h2 class="mb-4">Panel de Control General</h2>
+
+    <div class="row g-4 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card text-bg-primary shadow-sm h-100 text-center py-3">
+                <div class="card-body">
+                    <h5 class="card-title">Rutas en Tránsito</h5>
+                    <h1 class="display-4 fw-bold">{{ rutas }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-bg-success shadow-sm h-100 text-center py-3">
+                <div class="card-body">
+                    <h5 class="card-title">Vehículos en Base</h5>
+                    <h1 class="display-4 fw-bold">{{ vehiculos }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-bg-dark shadow-sm h-100 text-center py-3">
+                <div class="card-body">
+                    <h5 class="card-title">Rutas Finalizadas</h5>
+                    <h1 class="display-4 fw-bold">{{ finalizados }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card {{ 'text-bg-success' if ganancia_mes >= 0 else 'text-bg-danger' }} shadow-sm h-100 text-center py-3">
+                <div class="card-body">
+                    <h5 class="card-title">Ganancia Neta (Mes Actual)</h5>
+                    <h2 class="fw-bold mb-0">$ {{ '%.2f'|format(ganancia_mes) }}</h2>
+                    <p class="small mb-0 opacity-75">Flete − costos − gastos de ruta</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-5">
+        <div class="col-12 col-md-3">
+            <div class="card h-100 text-center shadow-sm">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <h5 class="card-title">Personal y Flota</h5>
+                        <p class="card-text text-muted">Añadir nuevos choferes y camiones al sistema.</p>
+                    </div>
+                    <div class="d-grid gap-2 mt-2">
+                        <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#modalChofer">Agregar Chofer</button>
+                        <button class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#modalVehiculo">Agregar Camión</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="card h-100 text-center shadow-sm">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <h5 class="card-title">Despachos</h5>
+                        <p class="card-text text-muted">Asignar nuevas rutas a la flota.</p>
+                    </div>
+                    <button class="btn btn-warning w-100 mt-2" data-bs-toggle="modal" data-bs-target="#modalEnvio">Crear Envío</button>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="card h-100 text-center shadow-sm">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <h5 class="card-title">Clientes</h5>
+                        <p class="card-text text-muted">Registrar nuevos clientes.</p>
+                    </div>
+                    <button class="btn btn-outline-dark w-100 mt-2" data-bs-toggle="modal" data-bs-target="#modalCliente">Agregar Cliente</button>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="card h-100 text-center shadow-sm">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <h5 class="card-title">Tablas y Registros</h5>
+                        <p class="card-text text-muted">Consultar y editar choferes, vehículos y rutas.</p>
+                    </div>
+                    <a href="{{ url_for('gestion') }}" class="btn btn-secondary w-100 mt-2">Ver Tablas</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="card h-100 text-center shadow-sm">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <h5 class="card-title">Configuración</h5>
+                        <p class="card-text text-muted">Precio del combustible y margen de ganancia.</p>
+                    </div>
+                    <button class="btn btn-outline-secondary w-100 mt-2" data-bs-toggle="modal" data-bs-target="#modalConfiguracion">
+                        Configuración Financiera
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ PRODUCTIVIDAD: GRÁFICO Y RANKINGS ============ -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="mb-0">Productividad</h3>
+        <a href="{{ url_for('reportes_vista') }}" class="btn btn-outline-primary">📄 Exportar Reportes PDF</a>
+    </div>
+    <div class="row g-4 mb-5">
+        <div class="col-lg-7">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Viajes entregados por mes (año actual)</h5>
+                    <canvas id="graficoViajesMes" height="220"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card h-100 shadow-sm mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Top 5 destinos más frecuentes</h5>
+                    <ol id="listaTopDestinos" class="list-group list-group-numbered list-group-flush">
+                        <li class="list-group-item text-muted">Cargando…</li>
+                    </ol>
+                </div>
+            </div>
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Top 5 choferes con más viajes</h5>
+                    <ol id="listaTopChoferes" class="list-group list-group-numbered list-group-flush">
+                        <li class="list-group-item text-muted">Cargando…</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ MODAL CHOFER ============ -->
+    <div class="modal fade" id="modalChofer" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">Registrar Nuevo Chofer</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{{ url_for('agregar_chofer') }}" method="POST">
+                    <div class="modal-body">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nombre Completo</label>
+                                <input type="text" class="form-control" name="nombre_completo" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Usuario (Login)</label>
+                                <input type="text" class="form-control" name="usuario" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">Contraseña Temporal</label>
+                                <input type="password" class="form-control" name="password" required>
+                            </div>
+                        </div>
+                        <hr>
+                        <h6 class="text-muted mb-3">Vencimiento de Documentos Legales</h6>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Licencia</label>
+                                <input type="date" class="form-control" name="vencimiento_licencia" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Certificado Médico</label>
+                                <input type="date" class="form-control" name="vencimiento_certificado_medico" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Cédula</label>
+                                <input type="date" class="form-control" name="vencimiento_cedula" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Guardar Registro</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ MODAL VEHÍCULO ============ -->
+    <div class="modal fade" id="modalVehiculo" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Registrar Nuevo Vehículo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{{ url_for('agregar_vehiculo') }}" method="POST">
+                    <div class="modal-body">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Placa <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control text-uppercase" name="placa" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Modelo del Camión</label>
+                                <input type="text" class="form-control" name="modelo" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Capacidad Carga (KG)</label>
+                                <input type="number" step="0.01" class="form-control" name="capacidad_carga" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Rendimiento (Km/L)</label>
+                                <input type="number" step="0.01" class="form-control" name="km_por_litro" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Costo Mant. x Km ($)</label>
+                                <input type="number" step="0.01" class="form-control" name="costo_mantenimiento_km" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Frecuencia Mant. (Km)</label>
+                                <input type="number" class="form-control" name="km_para_mantenimiento" required>
+                            </div>
+                        </div>
+                        <hr>
+                        <h6 class="text-muted mb-3">Permisos</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Vencimiento RCV</label>
+                                <input type="date" class="form-control" name="vencimiento_rcv" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Impuesto Alcaldía</label>
+                                <input type="date" class="form-control" name="vencimiento_impuesto_alcaldia" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Guardar Vehículo</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ MODAL CLIENTE ============ -->
+    <div class="modal fade" id="modalCliente" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">Registrar Nuevo Cliente</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{{ url_for('agregar_cliente') }}" method="POST">
+                    <div class="modal-body">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label">Razón Social</label>
+                            <input type="text" class="form-control" name="razon_social" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Dirección Principal</label>
+                            <input type="text" class="form-control" name="direccion_principal" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Teléfono</label>
+                            <input type="text" class="form-control" name="telefono">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-dark">Guardar Cliente</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ MODAL ENVÍO ============ -->
+    <div class="modal fade" id="modalEnvio" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fw-bold">Asignar Nueva Ruta</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{{ url_for('crear_envio') }}" method="POST">
+                    <div class="modal-body">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% if not lista_clientes or not lista_vehiculos or not lista_choferes %}
+                            <div class="alert alert-warning">
+                                Para crear un envío necesitas al menos un cliente, un vehículo
+                                <strong>disponible</strong> y un chofer activo registrados.
+                            </div>
+                        {% endif %}
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">Cliente</label>
+                                <select class="form-select" name="id_cliente" required>
+                                    <option value="" disabled selected>Selecciona un cliente…</option>
+                                    {% for c in lista_clientes %}
+                                        <option value="{{ c['id_cliente'] }}">{{ c['razon_social'] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Vehículo (disponible)</label>
+                                <select class="form-select" name="id_vehiculo" id="envioVehiculo" required>
+                                    <option value="" disabled selected>Selecciona un vehículo…</option>
+                                    {% for v in lista_vehiculos %}
+                                        <option value="{{ v['id_vehiculo'] }}"
+                                                data-kml="{{ v['km_por_litro'] }}"
+                                                data-cmk="{{ v['costo_mantenimiento_km'] }}">
+                                            {{ v['placa'] }} — {{ v['modelo'] }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Chofer</label>
+                                <select class="form-select" name="id_chofer" required>
+                                    <option value="" disabled selected>Selecciona un chofer…</option>
+                                    {% for ch in lista_choferes %}
+                                        <option value="{{ ch['id_usuario'] }}">{{ ch['nombre_completo'] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                <label class="form-label">Destino Final</label>
+                                <input type="text" class="form-control" name="destino" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Distancia (Km)</label>
+                                <div class="input-group">
+                                    <input type="number" step="0.1" min="0.1" class="form-control" name="distancia_km" id="envioDistancia" required>
+                                    <span class="input-group-text">km</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card bg-light border-0 mb-2">
+                            <div class="card-body py-2">
+                                <h6 class="card-title mb-2">Costo de Estimación de Ruta</h6>
+                                <p class="text-muted small mb-2">
+                                    Referencia para cotizar el viaje al cliente final: costo de
+                                    kilometraje/mantenimiento del vehículo + combustible a
+                                    $ {{ '%.2f'|format(precio_combustible) }} por litro.
+                                </p>
+                                <div class="row text-center">
+                                    <div class="col-3">
+                                        <div class="small text-muted">Mantenimiento</div>
+                                        <div class="fw-bold" id="estCostoMantenimiento">$ 0.00</div>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="small text-muted">Combustible</div>
+                                        <div class="fw-bold" id="estCostoCombustible">$ 0.00</div>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="small text-muted">Ganancia</div>
+                                        <div class="fw-bold" id="estGanancia">$ 0.00</div>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="small text-muted">Total a Cotizar</div>
+                                        <div class="fw-bold fs-5 text-dark" id="estCostoTotal">$ 0.00</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Costo del Flete (cobrado al cliente)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" step="0.01" min="0.01" class="form-control"
+                                           name="costo_flete" id="envioCostoFlete" required>
+                                </div>
+                                <p class="text-muted small mb-0">
+                                    Se sugiere con el "Total a Cotizar" de arriba; edítalo si acordaste
+                                    otro precio con el cliente. Se usa para calcular la ganancia neta
+                                    real del flete en los reportes.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-warning fw-bold">Crear Ruta</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ MODAL CONFIGURACIÓN FINANCIERA ============ -->
+    <div class="modal fade" id="modalConfiguracion" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-secondary text-white">
+                    <h5 class="modal-title">Configuración Paramétrica Financiera</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{{ url_for('configuracion') }}" method="POST">
+                    <div class="modal-body">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <p class="text-muted small">
+                            Estos valores se usan para estimar el costo de cada envío y calcular el
+                            <strong>total a cotizar</strong> al cliente final. Se guardan de inmediato,
+                            sin reiniciar el servidor.
+                        </p>
+
+                        <div class="mb-3">
+                            <label class="form-label">Precio del combustible por litro ($)</label>
+                            <input type="number" step="0.01" min="0.01" class="form-control"
+                                   name="precio_combustible" id="cfgPrecioCombustible"
+                                   value="{{ '%.2f'|format(precio_combustible) }}" required>
+                        </div>
+
+                        <hr>
+                        <h6 class="text-muted mb-2">Margen de Ganancia</h6>
+                        <p class="small text-muted mb-2">
+                            Monto adicional que se suma al costo de combustible + mantenimiento al
+                            cotizar una ruta al cliente final.
+                        </p>
+
+                        <div class="mb-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="tipo_ganancia"
+                                       id="cfgTipoPorcentaje" value="porcentaje" required
+                                       {% if tipo_ganancia == 'porcentaje' %}checked{% endif %}>
+                                <label class="form-check-label" for="cfgTipoPorcentaje">
+                                    Porcentaje del costo (combustible + mantenimiento)
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="tipo_ganancia"
+                                       id="cfgTipoFijo" value="fijo" required
+                                       {% if tipo_ganancia == 'fijo' %}checked{% endif %}>
+                                <label class="form-check-label" for="cfgTipoFijo">Monto fijo ($)</label>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" id="cfgLabelValorGanancia">
+                                {% if tipo_ganancia == 'fijo' %}Monto fijo de ganancia ($){% else %}Porcentaje de ganancia (%){% endif %}
+                            </label>
+                            <input type="number" step="0.01" min="0" class="form-control"
+                                   name="valor_ganancia" id="cfgValorGanancia"
+                                   value="{{ '%.2f'|format(valor_ganancia) }}" required>
+                        </div>
+
+                        <hr>
+                        <h6 class="text-muted mb-2">Ejemplo de cotización (ruta de 100 km)</h6>
+                        <p class="small text-muted mb-2">
+                            Con un vehículo de referencia de 5 km/litro y $0.20/km de mantenimiento:
+                        </p>
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between">
+                                Combustible <span id="ejCombustible">—</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between">
+                                Mantenimiento <span id="ejMantenimiento">—</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between">
+                                Ganancia <span id="ejGanancia">—</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between fw-bold">
+                                Total a Cotizar <span id="ejTotal">—</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Guardar Configuración</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
+<script>
+    // Estimación en vivo del costo de la ruta (modal "Crear Envío"), para
+    // que el administrador pueda cotizar el viaje al cliente antes de crearlo.
+    // Usa el mismo precio de combustible y margen de ganancia configurados en
+    // /configuracion, así que el estimado coincide con lo que realmente se
+    // guardará al crear la ruta (la ganancia es solo para cotizar, no se
+    // persiste en el envío).
+    const PRECIO_COMBUSTIBLE = {{ precio_combustible }};
+    const TIPO_GANANCIA = {{ tipo_ganancia|tojson }};
+    const VALOR_GANANCIA = {{ valor_ganancia }};
+
+    // El campo de costo del flete se sugiere automáticamente con el total
+    // estimado, pero deja de auto-completarse en cuanto el admin lo edita a
+    // mano (acordó un precio distinto con el cliente).
+    let costoFleteEditadoManualmente = false;
+    document.getElementById('envioCostoFlete').addEventListener('input', () => {
+        costoFleteEditadoManualmente = true;
+    });
+
+    function actualizarEstimacionRuta() {
+        const selectVehiculo = document.getElementById('envioVehiculo');
+        const distanciaInput = document.getElementById('envioDistancia');
+        const opcion = selectVehiculo.options[selectVehiculo.selectedIndex];
+        const distancia = parseFloat(distanciaInput.value);
+        const kml = opcion ? parseFloat(opcion.dataset.kml) : NaN;
+        const cmk = opcion ? parseFloat(opcion.dataset.cmk) : NaN;
+
+        let costoMantenimiento = 0;
+        let costoCombustible = 0;
+        if (!isNaN(distancia) && distancia > 0 && !isNaN(kml) && kml > 0 && !isNaN(cmk)) {
+            costoMantenimiento = distancia * cmk;
+            costoCombustible = (distancia / kml) * PRECIO_COMBUSTIBLE;
+        }
+        const base = costoMantenimiento + costoCombustible;
+        const ganancia = TIPO_GANANCIA === 'fijo' ? VALOR_GANANCIA : base * (VALOR_GANANCIA / 100);
+        const total = base + ganancia;
+
+        document.getElementById('estCostoMantenimiento').innerText = `$ ${costoMantenimiento.toFixed(2)}`;
+        document.getElementById('estCostoCombustible').innerText = `$ ${costoCombustible.toFixed(2)}`;
+        document.getElementById('estGanancia').innerText = `$ ${ganancia.toFixed(2)}`;
+        document.getElementById('estCostoTotal').innerText = `$ ${total.toFixed(2)}`;
+
+        if (!costoFleteEditadoManualmente) {
+            document.getElementById('envioCostoFlete').value = total.toFixed(2);
+        }
+    }
+
+    document.getElementById('envioVehiculo').addEventListener('change', actualizarEstimacionRuta);
+    document.getElementById('envioDistancia').addEventListener('input', actualizarEstimacionRuta);
+
+    // Ejemplo de cotización en vivo dentro del modal "Configuración Financiera".
+    const DISTANCIA_EJEMPLO = 100;
+    const KML_EJEMPLO = 5;
+    const CMK_EJEMPLO = 0.20;
+
+    function actualizarEjemploConfiguracion() {
+        const precio = parseFloat(document.getElementById('cfgPrecioCombustible').value) || 0;
+        const tipo = document.querySelector('input[name="tipo_ganancia"]:checked');
+        const valor = parseFloat(document.getElementById('cfgValorGanancia').value) || 0;
+
+        const combustible = (DISTANCIA_EJEMPLO / KML_EJEMPLO) * precio;
+        const mantenimiento = DISTANCIA_EJEMPLO * CMK_EJEMPLO;
+        const base = combustible + mantenimiento;
+        const ganancia = (tipo && tipo.value === 'fijo') ? valor : base * (valor / 100);
+        const total = base + ganancia;
+
+        document.getElementById('ejCombustible').innerText = `$ ${combustible.toFixed(2)}`;
+        document.getElementById('ejMantenimiento').innerText = `$ ${mantenimiento.toFixed(2)}`;
+        document.getElementById('ejGanancia').innerText = `$ ${ganancia.toFixed(2)}`;
+        document.getElementById('ejTotal').innerText = `$ ${total.toFixed(2)}`;
+
+        document.getElementById('cfgLabelValorGanancia').innerText = (tipo && tipo.value === 'fijo')
+            ? 'Monto fijo de ganancia ($)'
+            : 'Porcentaje de ganancia (%)';
+    }
+
+    document.getElementById('cfgPrecioCombustible').addEventListener('input', actualizarEjemploConfiguracion);
+    document.getElementById('cfgValorGanancia').addEventListener('input', actualizarEjemploConfiguracion);
+    document.getElementById('cfgTipoPorcentaje').addEventListener('change', actualizarEjemploConfiguracion);
+    document.getElementById('cfgTipoFijo').addEventListener('change', actualizarEjemploConfiguracion);
+    actualizarEjemploConfiguracion();
+
+    const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+    function pintarLista(idLista, datos, etiquetaVacia, campoNombre) {
+        const lista = document.getElementById(idLista);
+        lista.innerHTML = "";
+        if (!datos.length) {
+            lista.innerHTML = `<li class="list-group-item text-muted">${etiquetaVacia}</li>`;
+            return;
+        }
+        datos.forEach(fila => {
+            const item = document.createElement("li");
+            item.className = "list-group-item d-flex justify-content-between align-items-center";
+            item.innerHTML = `${fila[campoNombre]} <span class="badge bg-primary rounded-pill">${fila.total}</span>`;
+            lista.appendChild(item);
+        });
+    }
+
+    fetch('/api/estadisticas')
+        .then(respuesta => respuesta.json())
+        .then(datos => {
+            new Chart(document.getElementById('graficoViajesMes'), {
+                type: 'bar',
+                data: {
+                    labels: MESES,
+                    datasets: [{
+                        label: 'Viajes entregados',
+                        data: datos.viajes_por_mes,
+                        backgroundColor: '#0d6efd',
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+                    plugins: { legend: { display: false } },
+                },
+            });
+
+            pintarLista('listaTopDestinos', datos.top_destinos, 'Aún no hay viajes entregados.', 'destino');
+            pintarLista('listaTopChoferes', datos.top_choferes, 'Aún no hay viajes entregados.', 'nombre_completo');
+        })
+        .catch(() => {
+            document.getElementById('listaTopDestinos').innerHTML =
+                '<li class="list-group-item text-danger">No se pudieron cargar las estadísticas.</li>';
+            document.getElementById('listaTopChoferes').innerHTML =
+                '<li class="list-group-item text-danger">No se pudieron cargar las estadísticas.</li>';
+        });
+</script>
+{% endblock %}

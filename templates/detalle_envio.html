@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+
+{% block title %}Ruta #{{ envio['id_envio'] }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Ruta #{{ envio['id_envio'] }} — {{ envio['destino'] }}</h2>
+    <div>
+        <a href="{{ url_for('gestion') }}" class="btn btn-secondary">Volver a Gestión</a>
+        <a href="{{ url_for('reporte_pdf_ruta', id_envio=envio['id_envio']) }}" class="btn btn-outline-primary">
+            📄 Descargar PDF
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4 mb-2"><strong>Cliente:</strong> {{ envio['cliente'] }}</div>
+            <div class="col-md-4 mb-2"><strong>Vehículo:</strong> {{ envio['vehiculo'] }} — {{ envio['vehiculo_modelo'] }}</div>
+            <div class="col-md-4 mb-2"><strong>Chofer:</strong> {{ envio['chofer'] }}</div>
+            <div class="col-md-4 mb-2"><strong>Distancia:</strong> {{ envio['distancia_km'] }} km</div>
+            <div class="col-md-4 mb-2"><strong>Costo combustible (estimado):</strong> $ {{ '%.2f'|format(envio['costo_estimado_combustible']) }}</div>
+            <div class="col-md-4 mb-2"><strong>Costo mantenimiento (estimado):</strong> $ {{ '%.2f'|format(envio['costo_estimado_mantenimiento']) }}</div>
+            <div class="col-md-4 mb-2">
+                <strong>Gastos reales de ruta:</strong>
+                $ {{ '%.2f'|format(gastos_ruta) }}
+                <span class="text-muted small">(gasolina adicional, peajes, fallas)</span>
+            </div>
+            <div class="col-md-4 mb-2"><strong>Costo del Flete (cobrado al cliente):</strong> $ {{ '%.2f'|format(envio['costo_flete']) }}</div>
+            <div class="col-md-4 mb-2">
+                <strong>Ganancia Neta del Flete:</strong>
+                <span class="badge {{ 'bg-success' if ganancia_neta >= 0 else 'bg-danger' }} fs-6">
+                    $ {{ '%.2f'|format(ganancia_neta) }}
+                </span>
+            </div>
+            <div class="col-md-4 mb-2">
+                <strong>Estado:</strong>
+                {% if envio['estado_envio'] == 'Pendiente' %}
+                    <span class="badge bg-warning text-dark">Asignado</span>
+                {% elif envio['estado_envio'] == 'En Ruta' %}
+                    <span class="badge bg-primary">En Ruta</span>
+                {% elif envio['estado_envio'] == 'Entregado' %}
+                    <span class="badge bg-success">Entregado</span>
+                {% elif envio['estado_envio'] == 'Anulado' %}
+                    <span class="badge bg-dark">Anulado</span>
+                {% else %}
+                    <span class="badge bg-secondary">{{ envio['estado_envio'] }}</span>
+                {% endif %}
+            </div>
+            <div class="col-md-4 mb-2"><strong>Creado:</strong> {{ envio['fecha_creacion'] or '—' }}</div>
+            <div class="col-md-4 mb-2"><strong>Salida:</strong> {{ envio['fecha_salida'] or '—' }}</div>
+            <div class="col-md-4 mb-2"><strong>Llegada:</strong> {{ envio['fecha_llegada'] or '—' }}</div>
+        </div>
+    </div>
+</div>
+
+<h4 class="mb-3">Bitácora de Eventos</h4>
+<div class="table-responsive">
+    <table class="table table-striped table-hover table-bordered align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Evento</th>
+                <th>Descripción</th>
+                <th>Litros</th>
+                <th>Monto</th>
+                <th>Fecha/Hora</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ev in bitacora %}
+            <tr>
+                <td>{{ ev['tipo_evento'] }}</td>
+                <td>{{ ev['descripcion'] or '—' }}</td>
+                <td>{{ ev['cantidad_combustible'] if ev['cantidad_combustible'] is not none else '—' }}</td>
+                <td>{{ '$ %.2f'|format(ev['monto_valor']) if ev['monto_valor'] is not none else '—' }}</td>
+                <td>{{ ev['fecha_hora_registro'] }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center text-muted">Sin eventos registrados.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
