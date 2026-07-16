@@ -1,30 +1,12 @@
--- ==========================================================================
--- Esquema de la base de datos "logistica_db"
--- ==========================================================================
--- Exportado con `pg_dump --schema-only` a partir de la base de datos en su
--- estado actual (incluye todo lo agregado en las rondas de correcciones y
--- mejoras: fecha_salida/fecha_llegada en envios, y la tabla
--- configuracion_financiera). Reemplaza a los archivos anteriores
--- (schema.sql binario original, schema_v2.sql, migracion_v2.sql y
--- migracion_v3.sql), que ya no forman parte del proyecto.
+-- esquema de la base "logistica_db", exportado con pg_dump --schema-only.
+-- no trae datos de negocio, el usuario admin lo crea app.py solo en el
+-- primer arranque (inicializar_sistema()). si trae la fila unica de
+-- configuracion_financiera porque la tabla la necesita desde el arranque.
 --
--- NO incluye datos de negocio: el usuario 'admin' por defecto lo crea
--- automáticamente app.py la primera vez que arranca el servidor (ver
--- inicializar_sistema() en app.py). Sí incluye la fila única de
--- configuracion_financiera al final, porque la tabla exige esa fila (id=1)
--- para que la app tenga valores por defecto desde el primer arranque.
---
--- CÓMO USARLO
--- --------------------------------------------------------------------------
--- 1. Crear la base de datos vacía:
---        createdb -U postgres logistica_db
---
--- 2. Cargar este esquema:
---        psql -U postgres -d logistica_db -f schema.sql
---
--- 3. Arrancar la aplicación normalmente (python app.py); el usuario 'admin'
---    se crea solo en el primer arranque.
--- ==========================================================================
+-- como usarlo:
+--   createdb -U postgres logistica_db
+--   psql -U postgres -d logistica_db -f schema.sql
+--   python app.py   (crea el admin solo la primera vez)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -304,15 +286,9 @@ ALTER TABLE ONLY public.envios
     ADD CONSTRAINT envios_id_vehiculo_fkey FOREIGN KEY (id_vehiculo) REFERENCES public.vehiculos(id_vehiculo) ON DELETE RESTRICT;
 
 
---
--- Índices de rendimiento.
--- ------------------------------------------------------------------------
--- PostgreSQL NO crea índice automático sobre columnas de llave foránea (solo
--- sobre la llave primaria). Sin estos índices, cada JOIN/WHERE por chofer,
--- vehículo, estado o fecha en `envios`, y cada suma de gastos por ruta en
--- `bitacora_rutas` (usada en los resúmenes de ganancia neta), hace un escaneo
--- secuencial completo de la tabla a medida que crece el historial.
---
+-- indices de rendimiento: postgres no los crea solo para llaves foraneas
+-- (solo para la primaria). sin esto, los join/where por chofer, vehiculo,
+-- estado o fecha, y la suma de gastos por ruta, escanean toda la tabla
 
 CREATE INDEX idx_bitacora_rutas_id_envio ON public.bitacora_rutas USING btree (id_envio);
 CREATE INDEX idx_envios_id_chofer ON public.envios USING btree (id_chofer);
@@ -321,9 +297,7 @@ CREATE INDEX idx_envios_estado_envio ON public.envios USING btree (estado_envio)
 CREATE INDEX idx_envios_fecha_creacion ON public.envios USING btree (fecha_creacion);
 CREATE INDEX idx_envios_fecha_llegada ON public.envios USING btree (fecha_llegada);
 
---
--- Fila única de configuración financiera (valores por defecto).
---
+-- fila unica de configuracion financiera (valores por defecto)
 
 INSERT INTO public.configuracion_financiera (id, precio_combustible, tipo_ganancia, valor_ganancia)
 VALUES (1, 0.5, 'porcentaje', 0);

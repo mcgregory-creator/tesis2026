@@ -41,7 +41,7 @@
         >✅ FINALIZAR RUTA (LLEGADA)</button>
     </div>
 
-    <!-- ============ MODAL ACTUALIZAR ============ -->
+    <!-- modal actualizar -->
     <div class="modal fade" id="modalActualizar" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -225,8 +225,8 @@
         enviarEvento('Novedad', { descripcion: descripcion, precio: monto });
     }
 
-    // Recalcular el precio contrario al que el chofer va llenando, para que
-    // ambos campos siempre queden consistentes entre sí.
+    // recalcula el campo contrario al que va llenando el chofer, para que
+    // litros/precio/total siempre cuadren
     document.getElementById('gasPrecioLitro').addEventListener('input', function () {
         const litros = parseFloat(document.getElementById('gasLitros').value);
         const precioLitro = parseFloat(this.value);

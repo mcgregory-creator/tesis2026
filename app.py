@@ -2,7 +2,7 @@ import os
 import secrets
 from datetime import date
 
-# Carga opcional de variables desde un archivo .env (si python-dotenv está instalado).
+# carga variables de .env si python-dotenv esta instalado
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -20,37 +20,26 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 import reportes
 
-# ==============================================================================
-# 1. CONFIGURACIÓN INICIAL
-# ------------------------------------------------------------------------------
-# Toda la configuración sensible se lee de variables de entorno (.env). Si no se
-# define, se usa un valor por defecto SOLO apto para desarrollo local.
-# ==============================================================================
 app = Flask(__name__)
 
-# Clave secreta que firma las cookies de sesión. En producción DEBE venir del
-# entorno; si no existe, se genera una aleatoria (las sesiones no sobreviven a
-# un reinicio, lo cual es un recordatorio de que hay que configurarla).
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
-# Endurecimiento de la cookie de sesión.
+# endurece la cookie de sesion
 app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,   # No accesible por JavaScript
-    SESSION_COOKIE_SAMESITE="Lax",  # Mitiga CSRF en navegación entre sitios
+    SESSION_COOKIE_HTTPONLY=True,   # no accesible por js
+    SESSION_COOKIE_SAMESITE="Lax",  # mitiga csrf entre sitios
 )
 
-# En producción sobre HTTPS (p. ej. el hosting en la nube) conviene marcar la
-# cookie de sesión como Secure para que el navegador solo la envíe por HTTPS.
-# Se activa con SESSION_COOKIE_SECURE=1; se deja apagado por defecto para no
-# romper el acceso por HTTP en la LAN local.
+# en produccion sobre https conviene poner la cookie como secure.
+# se activa con SESSION_COOKIE_SECURE=1, apagado por defecto para no
+# romper el acceso por http en la lan
 if os.environ.get("SESSION_COOKIE_SECURE", "0") == "1":
     app.config["SESSION_COOKIE_SECURE"] = True
 
 DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 
-# En una LAN cerrada no hace falta CORS abierto: el front y la API comparten
-# origen. Se restringe a los orígenes indicados por entorno (por defecto ninguno
-# externo). Se mantiene el soporte de credenciales para las cookies de sesión.
+# en la lan no hace falta cors abierto, front y api comparten origen.
+# se restringe a los origenes de CORS_ORIGINS (por defecto ninguno externo)
 _cors_origins = os.environ.get("CORS_ORIGINS", "").strip()
 if _cors_origins:
     CORS(
@@ -59,19 +48,13 @@ if _cors_origins:
         supports_credentials=True,
     )
 
-# ==============================================================================
-# 2. CONEXIÓN A POSTGRESQL
-# ------------------------------------------------------------------------------
-# En un hosting en la nube (Render, Railway, Heroku...) la base de datos se
-# entrega como una única cadena de conexión en la variable DATABASE_URL. Si esa
-# variable existe se usa tal cual (normalizando el prefijo al driver psycopg2);
-# si no, se arma la URL con las variables sueltas DB_* (modo local / LAN).
-# ==============================================================================
+# conexion a postgres: si hay DATABASE_URL (hosting en la nube) se usa esa,
+# si no se arma con las variables DB_* sueltas (modo local/lan)
 def _construir_db_uri():
     url = os.environ.get("DATABASE_URL", "").strip()
     if url:
-        # SQLAlchemy 2.x no acepta el esquema "postgres://" (heredado de Heroku)
-        # y conviene fijar explícitamente el driver psycopg2.
+        # sqlalchemy 2.x no acepta "postgres://" (heredado de heroku), toca
+        # fijar el driver psycopg2 a mano
         if url.startswith("postgres://"):
             url = "postgresql+psycopg2://" + url[len("postgres://"):]
         elif url.startswith("postgresql://"):
@@ -93,34 +76,27 @@ engine = create_engine(
     pool_size=10,
     max_overflow=5,
     pool_timeout=30,
-    pool_pre_ping=True,   # Reconecta si la conexión quedó obsoleta
+    pool_pre_ping=True,   # reconecta si la conexion quedo vieja
 )
 
-# Tipos de evento válidos que el móvil puede reportar.
+# tipos de evento que puede mandar el movil
 EVENTOS_GASTO = {"Gasolina", "Peaje", "Novedad"}
 EVENTOS_ESTADO = {"Salida", "Llegada"}
 EVENTOS_VALIDOS = EVENTOS_GASTO | EVENTOS_ESTADO
 
-# ==============================================================================
-# 2.1 REGLAS DE NEGOCIO COMPARTIDAS
-# ------------------------------------------------------------------------------
-# Estados de envío sobre los que se permite editar/anular. Una vez "Entregado"
-# la ruta queda fija como registro histórico para los reportes de productividad.
-# ==============================================================================
+# estados de envio donde se puede editar/anular. una vez "entregado" la ruta
+# queda fija como historico para los reportes
 ESTADOS_ENVIO_EDITABLES = {"Pendiente", "En Ruta"}
 
 
 def _documento_vigente(fecha_vencimiento):
-    """Un documento está vigente si tiene fecha registrada y no ha vencido."""
+    """vigente si tiene fecha y no vencio"""
     return fecha_vencimiento is not None and fecha_vencimiento >= date.today()
 
 
 def _validar_documentos_chofer(chofer):
-    """Verifica licencia, certificado médico y cédula del chofer.
-
-    Devuelve (True, None) si todo está vigente, o (False, mensaje) indicando
-    qué documento falta o venció.
-    """
+    """chequea licencia, certificado medico y cedula del chofer.
+    devuelve (True, None) si esta todo vigente, o (False, mensaje) si falta algo"""
     faltantes = []
     if not _documento_vigente(chofer["vencimiento_licencia"]):
         faltantes.append("licencia de conducir")
@@ -134,7 +110,7 @@ def _validar_documentos_chofer(chofer):
 
 
 def _validar_documentos_vehiculo(vehiculo):
-    """Verifica RCV e impuesto de alcaldía del vehículo."""
+    """chequea rcv e impuesto de alcaldia del vehiculo"""
     faltantes = []
     if not _documento_vigente(vehiculo["vencimiento_rcv"]):
         faltantes.append("RCV")
@@ -146,18 +122,16 @@ def _validar_documentos_vehiculo(vehiculo):
 
 
 def _liberar_vehiculo(conn, id_vehiculo):
-    """Marca un vehículo como Disponible (fin de ruta, edición o anulación)."""
+    """marca el vehiculo como disponible"""
     conn.execute(text(
         "UPDATE vehiculos SET estado = 'Disponible' WHERE id_vehiculo = :id"
     ), {"id": id_vehiculo})
 
 
 def _chofer_con_ruta_activa(conn, id_chofer, excluir_id_envio=None):
-    """True si el chofer ya tiene una ruta Pendiente o En Ruta asignada.
-
-    El dashboard del chofer solo muestra una ruta activa a la vez, así que
-    asignarle una segunda la dejaría invisible hasta entregar la primera.
-    """
+    """true si el chofer ya tiene una ruta pendiente o en ruta.
+    el dashboard del chofer solo muestra una a la vez, si le asignas otra
+    queda invisible hasta que entregue la primera"""
     consulta = (
         "SELECT 1 FROM envios "
         "WHERE id_chofer = :chofer AND estado_envio IN ('Pendiente', 'En Ruta')"
@@ -170,26 +144,21 @@ def _chofer_con_ruta_activa(conn, id_chofer, excluir_id_envio=None):
 
 
 def _obtener_configuracion_financiera(conn):
-    """Lee el precio del combustible y el margen de ganancia configurados
-    desde la base de datos (tabla `configuracion_financiera`, fila única
-    id=1 — ver migracion_v3.sql / schema_v2.sql). Editable desde
-    /configuracion sin reiniciar el servidor.
-    """
+    """lee precio de combustible y margen de ganancia de configuracion_financiera
+    (fila unica id=1), editable desde /configuracion sin reiniciar nada"""
     fila = conn.execute(text(
         "SELECT precio_combustible, tipo_ganancia, valor_ganancia "
         "FROM configuracion_financiera WHERE id = 1"
     )).mappings().fetchone()
     if fila is None:
-        # Red de seguridad por si la migración aún no se aplicó.
+        # por si la migracion no se aplico todavia
         return {"precio_combustible": 0.5, "tipo_ganancia": "porcentaje", "valor_ganancia": 0}
     return fila
 
 
 def _calcular_costos_ruta(distancia, vehiculo, config_financiera):
-    """Costo de combustible y mantenimiento de una ruta (lo que se guarda en
-    `envios`). No incluye la ganancia: esa es solo para cotizar al cliente,
-    se calcula aparte con `_calcular_ganancia` y no se persiste por ruta.
-    """
+    """costo de combustible y mantenimiento de la ruta (lo que se guarda en
+    envios). no incluye la ganancia, esa es solo para cotizar y se calcula aparte"""
     km_por_litro = float(vehiculo["km_por_litro"]) or 1.0
     costo_combustible = round(
         (distancia / km_por_litro) * float(config_financiera["precio_combustible"]), 2
@@ -199,18 +168,17 @@ def _calcular_costos_ruta(distancia, vehiculo, config_financiera):
 
 
 def _calcular_ganancia(costo_combustible, costo_mantenimiento, config_financiera):
-    """Margen de ganancia sobre combustible + mantenimiento, según el modo
-    configurado: porcentaje de la base, o un monto fijo."""
+    """margen de ganancia sobre combustible + mantenimiento, segun el modo
+    configurado: porcentaje o monto fijo"""
     if config_financiera["tipo_ganancia"] == "fijo":
         return round(float(config_financiera["valor_ganancia"]), 2)
     base = costo_combustible + costo_mantenimiento
     return round(base * (float(config_financiera["valor_ganancia"]) / 100), 2)
 
 
-# Subconsulta reutilizable: gastos reales de ruta (gasolina adicional, peajes
-# y fallas mecánicas) reportados por el chofer desde la bitácora, con el total
-# y el desglose por categoría. No incluye "Salida"/"Llegada", que son eventos
-# de estado, no gastos.
+# subconsulta con los gastos reales de la ruta (gasolina, peajes, fallas) que
+# reporta el chofer desde la bitacora, total y por categoria. salida/llegada
+# no cuentan porque son eventos de estado, no gastos
 _SUBCONSULTA_GASTOS_RUTA = (
     "(SELECT id_envio, COALESCE(SUM(monto_valor), 0) AS gastos_ruta, "
     "        COALESCE(SUM(monto_valor) FILTER (WHERE tipo_evento = 'Gasolina'), 0) AS gastos_gasolina, "
@@ -222,7 +190,7 @@ _SUBCONSULTA_GASTOS_RUTA = (
 
 
 def _gastos_ruta(conn, id_envio):
-    """Total de gastos reales de una ruta puntual (ver un solo envío)."""
+    """total de gastos reales de una ruta puntual"""
     return float(conn.execute(text(
         "SELECT COALESCE(SUM(monto_valor), 0) FROM bitacora_rutas "
         "WHERE id_envio = :id AND tipo_evento IN ('Gasolina', 'Peaje', 'Novedad')"
@@ -230,22 +198,17 @@ def _gastos_ruta(conn, id_envio):
 
 
 def _ganancia_neta(costo_flete, costo_combustible, costo_mantenimiento, gastos_ruta):
-    """Ganancia neta real del flete:
-
-    costo del flete − combustible estimado − mantenimiento estimado − gastos
-    reales de la ruta (gasolina adicional, peajes, fallas mecánicas).
-    """
+    """ganancia neta real: flete - combustible estimado - mantenimiento estimado
+    - gastos reales de la ruta (gasolina, peajes, fallas)"""
     return round(
         float(costo_flete) - float(costo_combustible) - float(costo_mantenimiento)
         - float(gastos_ruta), 2,
     )
 
-# ==============================================================================
-# 3. PROTECCIÓN CSRF (sin dependencias externas)
-# ------------------------------------------------------------------------------
-# Se genera un token por sesión. Los formularios lo envían en un campo oculto y
-# las peticiones fetch de la API lo mandan en la cabecera 'X-CSRFToken'.
-# ==============================================================================
+
+# proteccion csrf sin dependencias externas: se genera un token por sesion,
+# los formularios lo mandan en un campo oculto y el fetch de la api en el
+# header X-CSRFToken
 def _get_csrf_token():
     token = session.get("_csrf_token")
     if not token:
@@ -256,7 +219,7 @@ def _get_csrf_token():
 
 @app.context_processor
 def inyectar_csrf():
-    """Expone csrf_token() a todas las plantillas Jinja2."""
+    """expone csrf_token() a los templates"""
     return {"csrf_token": _get_csrf_token}
 
 
@@ -265,41 +228,38 @@ def _validar_csrf():
     enviado = request.form.get("csrf_token") or request.headers.get("X-CSRFToken")
     return token_sesion is not None and enviado == token_sesion
 
-# ==============================================================================
-# 4. MIDDLEWARE DE SEGURIDAD (SESIÓN + CSRF)
-# ==============================================================================
+
+# middleware de seguridad: sesion + csrf
 @app.before_request
 def auditar_acceso_sesion():
-    """Se ejecuta ANTES de cada ruta: garantiza token CSRF, valida CSRF en
-    métodos que modifican estado y exige sesión iniciada."""
-    # Asegurar que exista un token CSRF disponible para las plantillas.
+    """corre antes de cada request: asegura el token csrf, lo valida en los
+    metodos que cambian estado y exige sesion iniciada"""
+    # que siempre haya un token csrf para los templates
     _get_csrf_token()
 
-    # Validación CSRF para cualquier método que altere datos.
+    # valida csrf en los metodos que cambian datos
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         if not _validar_csrf():
             if request.path.startswith("/api/"):
                 return jsonify({"error": "Token CSRF inválido o ausente."}), 400
             abort(400)
 
-    # El login y los archivos estáticos son de libre acceso.
+    # login y estaticos son libres
     if request.endpoint == "login" or (
         request.endpoint and request.endpoint.startswith("static")
     ):
         return None
 
-    # A partir de aquí se exige sesión válida.
+    # de aca en adelante se exige sesion
     if "usuario_id" not in session:
         if request.path.startswith("/api/"):
             abort(401)
         flash("Por seguridad, debes iniciar sesión para acceder.", "warning")
         return redirect(url_for("login"))
 
-    # Si el usuario tiene un cambio de contraseña pendiente (p. ej. el admin en
-    # su primer ingreso), se le retiene en la pantalla de cambio obligatorio: no
-    # puede usar el resto del sistema hasta definir una contraseña propia. Los
-    # archivos estáticos y el login ya salieron antes; aquí solo se permiten la
-    # propia pantalla de cambio y cerrar sesión.
+    # si el usuario tiene cambio de clave pendiente (el admin en su primer
+    # ingreso) se lo retiene en esa pantalla hasta que defina su propia clave.
+    # solo se permite esa pagina y el logout
     if session.get("debe_cambiar_clave") and request.endpoint not in (
         "cambio_obligatorio_password", "logout"
     ):
@@ -311,13 +271,12 @@ def auditar_acceso_sesion():
 
 
 def solo_admin():
-    """Aborta con 403 si el usuario en sesión no es Administrador."""
+    """403 si el usuario en sesion no es administrador"""
     if session.get("rol") != "Administrador":
         abort(403)
 
-# ==============================================================================
-# 5. AUTENTICACIÓN
-# ==============================================================================
+
+# autenticacion
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if "usuario_id" in session:
@@ -335,7 +294,7 @@ def login():
             ).mappings().fetchone()
 
         if user and check_password_hash(user["password"], password_ingresado):
-            # Regenerar el token CSRF al iniciar sesión (evita fijación de sesión).
+            # regenera el token csrf al loguear (evita fijacion de sesion)
             session.clear()
             session["_csrf_token"] = secrets.token_hex(32)
             session["usuario_id"] = user["id_usuario"]
@@ -357,13 +316,11 @@ def logout():
     flash("Has cerrado sesión exitosamente.", "info")
     return redirect(url_for("login"))
 
-# ==============================================================================
-# 5.1 PERFIL DE USUARIO (autoservicio de contraseña)
-# ==============================================================================
+
+# perfil de usuario: cambio de clave por el propio usuario
 @app.route("/perfil/cambiar_password", methods=["POST"])
 def cambiar_password():
-    """Cualquier usuario logueado (Administrador o Chofer) cambia su propia
-    contraseña, confirmando la actual."""
+    """cualquier usuario logueado cambia su propia clave, confirmando la actual"""
     password_actual = request.form.get("password_actual", "")
     password_nueva = request.form.get("password_nueva", "")
     confirmar = request.form.get("confirmar_password", "")
@@ -395,10 +352,8 @@ def cambiar_password():
 
 @app.route("/perfil/cambio_obligatorio", methods=["GET", "POST"])
 def cambio_obligatorio_password():
-    """Retiene a un usuario con cambio de contraseña pendiente (el admin en su
-    primer ingreso) hasta que define una contraseña propia. No pide la
-    contraseña actual porque el usuario acaba de autenticarse con ella. El
-    mínimo de 8 caracteres impide, además, dejar la clave inicial 'admin'."""
+    """retiene a un usuario con cambio de clave pendiente hasta que defina una
+    propia. no pide la clave actual porque se acaba de autenticar con ella"""
     if "usuario_id" not in session:
         return redirect(url_for("login"))
     if not session.get("debe_cambiar_clave"):
@@ -427,9 +382,8 @@ def cambio_obligatorio_password():
 
     return render_template("cambio_obligatorio.html")
 
-# ==============================================================================
-# 6. DASHBOARD PRINCIPAL (RBAC)
-# ==============================================================================
+
+# dashboard principal segun el rol
 @app.route("/")
 def inicio():
     with engine.connect() as conn:
@@ -444,10 +398,9 @@ def inicio():
                 text("SELECT COUNT(*) AS total FROM envios WHERE estado_envio = 'Entregado'")
             ).scalar_one()
 
-            # Ganancia neta del mes en curso: mismo criterio que el reporte
-            # mensual en PDF (COALESCE(fecha_llegada, fecha_creacion) para
-            # decidir el mes, se excluyen solo las rutas Anuladas), para que
-            # esta tarjeta y el reporte exportable siempre coincidan.
+            # ganancia neta del mes: mismo criterio que el pdf mensual (fecha
+            # llegada o creacion, solo se excluyen las anuladas) para que
+            # coincida con el reporte
             hoy = date.today()
             ganancia_mes = conn.execute(text(
                 "SELECT COALESCE(SUM("
@@ -461,7 +414,7 @@ def inicio():
                 "  AND EXTRACT(MONTH FROM COALESCE(e.fecha_llegada, e.fecha_creacion)) = :mes"
             ), {"anio": hoy.year, "mes": hoy.month}).scalar_one()
 
-            # Listas para poblar los desplegables de los modales.
+            # listas para los selects de los modales
             clientes = conn.execute(
                 text("SELECT id_cliente, razon_social FROM clientes ORDER BY razon_social")
             ).mappings().fetchall()
@@ -489,11 +442,7 @@ def inicio():
                 valor_ganancia=float(config_financiera["valor_ganancia"]),
             )
         else:
-            # Solo se muestra una ruta realmente activa (Pendiente o En Ruta).
-            # Excluir explícitamente 'Entregado' y 'Anulado' — antes se usaba
-            # "!= 'Entregado'", que dejaba pasar rutas Anuladas y, si el
-            # chofer tenía una ruta vieja anulada, el ORDER BY + LIMIT 1
-            # mostraba esa en vez de la nueva ruta activa.
+            # solo se muestra la ruta activa (pendiente o en ruta), sin anuladas
             consulta_ruta = text(
                 "SELECT * FROM envios WHERE id_chofer = :chofer_id "
                 "AND estado_envio IN ('Pendiente', 'En Ruta') "
@@ -504,9 +453,8 @@ def inicio():
             ).mappings().fetchone()
             return render_template("dashboard_chofer.html", ruta=ruta_actual)
 
-# ==============================================================================
-# 7. MÓDULOS DE ADMINISTRACIÓN (VISTAS)
-# ==============================================================================
+
+# vistas de administracion
 @app.route("/gestion")
 def gestion():
     solo_admin()
@@ -598,9 +546,8 @@ def choferes():
 
 @app.route("/configuracion", methods=["POST"])
 def configuracion():
-    """Guarda el precio del combustible y el margen de ganancia. Se edita
-    desde el modal "Configuración Financiera" en el panel principal — ya no
-    es una página propia."""
+    """guarda precio de combustible y margen de ganancia, desde el modal
+    "configuracion financiera" del panel principal"""
     solo_admin()
     try:
         precio_combustible = float(request.form["precio_combustible"])
@@ -624,9 +571,8 @@ def configuracion():
     flash("Configuración financiera actualizada.", "success")
     return redirect(url_for("inicio"))
 
-# ==============================================================================
-# 8. ENDPOINTS DE ALTA (INSERT REALES)
-# ==============================================================================
+
+# endpoints de alta (insert reales)
 @app.route("/agregar_cliente", methods=["POST"])
 def agregar_cliente():
     solo_admin()
@@ -758,8 +704,8 @@ def crear_envio():
 
     try:
         with engine.begin() as conn:
-            # FOR UPDATE bloquea la fila hasta el commit: evita que dos
-            # administradores asignen el mismo vehículo en solicitudes simultáneas.
+            # for update bloquea la fila hasta el commit, evita que dos admins
+            # asignen el mismo vehiculo a la vez
             vehiculo = conn.execute(text(
                 "SELECT km_por_litro, costo_mantenimiento_km, estado, "
                 "       vencimiento_rcv, vencimiento_impuesto_alcaldia "
@@ -800,7 +746,7 @@ def crear_envio():
                 flash("El chofer ya tiene una ruta activa asignada.", "warning")
                 return redirect(url_for("inicio"))
 
-            # Cálculo de costos estimados (columnas NOT NULL en el esquema).
+            # calcula los costos estimados (son NOT NULL en el esquema)
             config_financiera = _obtener_configuracion_financiera(conn)
             costo_combustible, costo_mantenimiento = _calcular_costos_ruta(
                 distancia, vehiculo, config_financiera
@@ -817,7 +763,7 @@ def crear_envio():
                 "flete": costo_flete,
                 "ccomb": costo_combustible, "cmant": costo_mantenimiento,
             })
-            # El vehículo queda asignado hasta que la ruta se entregue.
+            # el vehiculo queda asignado hasta que se entregue
             conn.execute(text(
                 "UPDATE vehiculos SET estado = 'Asignado' WHERE id_vehiculo = :id"
             ), {"id": id_vehiculo})
@@ -829,12 +775,9 @@ def crear_envio():
         flash("No se pudo crear el envío.", "danger")
     return redirect(url_for("inicio"))
 
-# ==============================================================================
-# 8.1 EDICIÓN Y BAJA ADMINISTRATIVA
-# ------------------------------------------------------------------------------
-# Endpoints para corregir registros ya existentes desde "Gestión de Tablas":
-# editar choferes/vehículos, resetear contraseñas, corregir o anular rutas.
-# ==============================================================================
+
+# edicion y baja: editar choferes/vehiculos, resetear claves, corregir o
+# anular rutas desde gestion de tablas
 @app.route("/gestion/chofer/<int:id_usuario>/editar", methods=["POST"])
 def editar_chofer(id_usuario):
     solo_admin()
@@ -924,9 +867,8 @@ def editar_vehiculo(id_vehiculo):
                 flash("El vehículo indicado no existe.", "danger")
                 return redirect(url_for("gestion"))
 
-            # El estado "Asignado" lo controla el sistema (ruta activa); el
-            # admin solo puede alternar Disponible <-> Fuera de Servicio
-            # cuando el vehículo no está en ruta.
+            # "asignado" lo controla el sistema, el admin solo puede alternar
+            # disponible <-> fuera de servicio si no esta en ruta
             estado_final = actual["estado"]
             if actual["estado"] == "Asignado":
                 if estado_solicitado == "Fuera de Servicio":
@@ -962,8 +904,7 @@ def editar_vehiculo(id_vehiculo):
 
 @app.route("/gestion/usuario/<int:id_usuario>/resetear_password", methods=["POST"])
 def resetear_password(id_usuario):
-    """El administrador fija una nueva contraseña para cualquier usuario
-    (chofer o empleado/administrador) sin necesidad de conocer la anterior."""
+    """el admin fija una nueva clave para cualquier usuario sin conocer la anterior"""
     solo_admin()
     destino = request.referrer or url_for("gestion")
     nueva_password = request.form.get("password", "")
@@ -985,8 +926,7 @@ def resetear_password(id_usuario):
 
 @app.route("/gestion/usuario/<int:id_usuario>/estado", methods=["POST"])
 def cambiar_estado_usuario(id_usuario):
-    """Activa/desactiva un usuario (empleados y administradores; los choferes
-    tienen su propio toggle dentro de 'editar_chofer')."""
+    """activa/desactiva un usuario (los choferes tienen su propio toggle en editar_chofer)"""
     solo_admin()
     destino = request.referrer or url_for("empleados")
     estado_nuevo = request.form.get("estado")
@@ -1008,8 +948,8 @@ def cambiar_estado_usuario(id_usuario):
 
 @app.route("/gestion/envio/<int:id_envio>/editar", methods=["POST"])
 def editar_envio(id_envio):
-    """Corrige una ruta Pendiente o En Ruta: destino, distancia, cliente,
-    vehículo y/o chofer, revalidando disponibilidad y documentos vigentes."""
+    """corrige una ruta pendiente o en ruta: destino, distancia, cliente,
+    vehiculo y/o chofer, revalidando todo de nuevo"""
     solo_admin()
     try:
         id_cliente = int(request.form["id_cliente"])
@@ -1043,8 +983,7 @@ def editar_envio(id_envio):
             id_vehiculo_anterior = envio["id_vehiculo"]
             cambia_vehiculo = id_vehiculo_nuevo != id_vehiculo_anterior
 
-            # Se bloquea la fila del vehículo (nuevo o el mismo) para evitar
-            # que otra petición lo asigne al mismo tiempo.
+            # bloquea la fila del vehiculo para que nadie mas lo asigne a la vez
             vehiculo = conn.execute(text(
                 "SELECT km_por_litro, costo_mantenimiento_km, estado, "
                 "       vencimiento_rcv, vencimiento_impuesto_alcaldia "
@@ -1121,7 +1060,7 @@ def editar_envio(id_envio):
 
 @app.route("/gestion/envio/<int:id_envio>/anular", methods=["POST"])
 def anular_envio(id_envio):
-    """Anula una ruta Pendiente o En Ruta y libera el vehículo asignado."""
+    """anula una ruta pendiente o en ruta y libera el vehiculo"""
     solo_admin()
     try:
         with engine.begin() as conn:
@@ -1147,12 +1086,11 @@ def anular_envio(id_envio):
         flash("No se pudo anular la ruta.", "danger")
     return redirect(url_for("gestion"))
 
-# ==============================================================================
-# 9. API REST PARA EL MÓVIL (BITÁCORA TRANSACCIONAL)
-# ==============================================================================
+
+# api rest para el movil (bitacora)
 @app.route("/api/incidencia", methods=["POST"])
 def registrar_incidencia():
-    """Recibe eventos JSON desde el móvil del chofer en la LAN."""
+    """recibe eventos json del movil del chofer"""
     if session.get("rol") != "Chofer":
         return jsonify({"error": "Acceso denegado, rol insuficiente"}), 403
 
@@ -1160,7 +1098,7 @@ def registrar_incidencia():
     id_envio = datos.get("id_envio")
     tipo_evento = datos.get("tipo_evento")
 
-    # --- Validación de entrada ---
+    # valida lo que llega
     if tipo_evento not in EVENTOS_VALIDOS:
         return jsonify({"error": "Tipo de evento no reconocido."}), 400
     try:
@@ -1168,7 +1106,7 @@ def registrar_incidencia():
     except (TypeError, ValueError):
         return jsonify({"error": "Identificador de envío inválido."}), 400
 
-    # Cantidad (litros) y monto solo aplican a eventos de gasto.
+    # litros y monto solo aplican a eventos de gasto
     def _num(valor):
         try:
             n = float(valor)
@@ -1182,9 +1120,8 @@ def registrar_incidencia():
     if tipo_evento in EVENTOS_GASTO and monto <= 0:
         return jsonify({"error": "El monto del gasto debe ser mayor que cero."}), 400
 
-    # "Peaje" y "Novedad" llevan un texto libre que ingresa el chofer (nombre
-    # del peaje / descripción de la falla mecánica); los demás eventos usan
-    # una descripción fija.
+    # peaje y novedad llevan texto libre del chofer (nombre del peaje o la
+    # falla), el resto usa una descripcion fija
     if tipo_evento in ("Peaje", "Novedad"):
         descripcion = (datos.get("descripcion") or "").strip()
         if not descripcion:
@@ -1199,7 +1136,7 @@ def registrar_incidencia():
 
     try:
         with engine.begin() as conn:
-            # El envío debe existir, pertenecer a este chofer y no estar cerrado.
+            # el envio debe existir, ser de este chofer y no estar cerrado
             envio = conn.execute(text(
                 "SELECT estado_envio, id_vehiculo FROM envios "
                 "WHERE id_envio = :id AND id_chofer = :chofer"
@@ -1222,7 +1159,7 @@ def registrar_incidencia():
                 "monto": monto if tipo_evento in EVENTOS_GASTO else None,
             })
 
-            # Transiciones de estado del envío.
+            # cambia el estado del envio
             if tipo_evento == "Salida" and envio["estado_envio"] == "Pendiente":
                 conn.execute(text(
                     "UPDATE envios SET estado_envio = 'En Ruta', "
@@ -1233,7 +1170,7 @@ def registrar_incidencia():
                     "UPDATE envios SET estado_envio = 'Entregado', "
                     "fecha_llegada = CURRENT_TIMESTAMP WHERE id_envio = :envio"
                 ), {"envio": id_envio})
-                # Liberar el vehículo al finalizar la ruta.
+                # libera el vehiculo al terminar
                 _liberar_vehiculo(conn, envio["id_vehiculo"])
 
         return jsonify({"status": "success", "mensaje": f"Evento {tipo_evento} procesado en DB."}), 200
@@ -1243,12 +1180,9 @@ def registrar_incidencia():
     except SQLAlchemyError:
         return jsonify({"error": "Error al registrar el evento en la base de datos."}), 500
 
-# ==============================================================================
-# 9.1 ESTADÍSTICAS PARA EL DASHBOARD (KPIs, gráfico anual, rankings)
-# ------------------------------------------------------------------------------
-# Todo se calcula sobre envíos "Entregado": el objetivo es medir productividad
-# real, no planificación futura (rutas Pendientes/En Ruta no cuentan aquí).
-# ==============================================================================
+
+# estadisticas del dashboard (kpis, grafico, rankings). todo sobre envios
+# "entregado", no cuenta lo pendiente/en ruta
 @app.route("/api/estadisticas")
 def api_estadisticas():
     solo_admin()
@@ -1285,9 +1219,8 @@ def api_estadisticas():
         "top_choferes": [dict(fila) for fila in top_choferes],
     })
 
-# ==============================================================================
-# 9.2 REPORTES EN PDF (por ruta, por chofer, por mes)
-# ==============================================================================
+
+# reportes en pdf: por ruta, por chofer, por mes
 MESES_ES = [
     (1, "Enero"), (2, "Febrero"), (3, "Marzo"), (4, "Abril"),
     (5, "Mayo"), (6, "Junio"), (7, "Julio"), (8, "Agosto"),
@@ -1382,11 +1315,9 @@ def reporte_pdf_mes():
         abort(400)
 
     with engine.connect() as conn:
-        # El mes de una ruta se decide por su fecha de llegada (cuando ya
-        # generó el gasto/ingreso real); si aún no fue entregada, se usa la
-        # fecha de creación. Mismo criterio que /api/estadisticas, para que
-        # el reporte mensual y el gráfico de productividad no queden
-        # inconsistentes sobre a qué mes pertenece una ruta.
+        # el mes de la ruta se decide por fecha de llegada (o creacion si no
+        # se ha entregado), igual que /api/estadisticas para que no quede
+        # descuadrado con el grafico
         envios = conn.execute(text(
             "SELECT e.id_envio, c.razon_social AS cliente, u.nombre_completo AS chofer, "
             "       v.placa AS vehiculo, e.destino, e.distancia_km, e.estado_envio, "
@@ -1408,16 +1339,11 @@ def reporte_pdf_mes():
     buffer = reportes.pdf_mes(anio, mes, envios)
     return _pdf_response(buffer, f"reporte_{anio}_{mes:02d}.pdf")
 
-# ==============================================================================
-# 10. ARRANQUE Y CREACIÓN DE ADMIN POR DEFECTO
-# ==============================================================================
-def inicializar_sistema():
-    """Crea un usuario admin por defecto si aún no existe.
 
-    Reintenta la conexión varias veces para tolerar que la base de datos aún
-    esté arrancando: es lo habitual al levantar todo junto con Docker Compose,
-    donde el contenedor de la app puede iniciar unos segundos antes que el de
-    PostgreSQL termine de aceptar conexiones."""
+# arranque: crea el admin por defecto
+def inicializar_sistema():
+    """crea el admin por defecto si no existe. reintenta varias veces por si
+    la base de datos todavia esta arrancando (tipico con docker compose)"""
     import time
     from sqlalchemy.exc import OperationalError
 
@@ -1432,12 +1358,10 @@ def inicializar_sistema():
                         password_hash = generate_password_hash(
                             os.environ.get("ADMIN_PASSWORD", "admin")
                         )
-                        # Se crea con debe_cambiar_clave = true: en su primer
-                        # ingreso el sistema le obligará a definir una contraseña
-                        # propia, ya que la inicial ('admin') es conocida.
-                        # ON CONFLICT evita una condición de carrera cuando varios
-                        # workers de gunicorn arrancan a la vez: solo uno lo inserta
-                        # y el resto no falla ni duplica.
+                        # se crea con debe_cambiar_clave=true, la clave inicial
+                        # es conocida asi que se le obliga a cambiarla al entrar.
+                        # ON CONFLICT evita duplicados si varios workers de
+                        # gunicorn arrancan a la vez
                         result = conn.execute(text(
                             "INSERT INTO usuarios "
                             "(nombre_completo, usuario, password, rol, estado, debe_cambiar_clave) "

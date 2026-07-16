@@ -164,7 +164,7 @@
     </div>
 </div>
 
-<!-- ============ MODALES DE EDICIÓN: CHOFERES ============ -->
+<!-- modales de edicion: choferes -->
 {% for ch in choferes %}
 <div class="modal fade" id="modalEditarChofer{{ ch['id_usuario'] }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -226,7 +226,7 @@
 </div>
 {% endfor %}
 
-<!-- ============ MODALES DE EDICIÓN: VEHÍCULOS ============ -->
+<!-- modales de edicion: vehiculos -->
 {% for v in vehiculos %}
 <div class="modal fade" id="modalEditarVehiculo{{ v['id_vehiculo'] }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -303,7 +303,7 @@
 </div>
 {% endfor %}
 
-<!-- ============ MODALES DE EDICIÓN Y ANULACIÓN: ENVÍOS ============ -->
+<!-- modales de edicion y anulacion: envios -->
 {% for e in envios %}
 {% if e['estado_envio'] in estados_editables %}
 <div class="modal fade" id="modalEditarEnvio{{ e['id_envio'] }}" tabindex="-1" aria-hidden="true">

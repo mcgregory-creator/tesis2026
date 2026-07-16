@@ -104,7 +104,7 @@
         </div>
     </div>
 
-    <!-- ============ PRODUCTIVIDAD: GRÁFICO Y RANKINGS ============ -->
+    <!-- productividad: grafico y rankings -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h3 class="mb-0">Productividad</h3>
         <a href="{{ url_for('reportes_vista') }}" class="btn btn-outline-primary">📄 Exportar Reportes PDF</a>
@@ -138,7 +138,7 @@
         </div>
     </div>
 
-    <!-- ============ MODAL CHOFER ============ -->
+    <!-- modal chofer -->
     <div class="modal fade" id="modalChofer" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -191,7 +191,7 @@
         </div>
     </div>
 
-    <!-- ============ MODAL VEHÍCULO ============ -->
+    <!-- modal vehiculo -->
     <div class="modal fade" id="modalVehiculo" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -254,7 +254,7 @@
         </div>
     </div>
 
-    <!-- ============ MODAL CLIENTE ============ -->
+    <!-- modal cliente -->
     <div class="modal fade" id="modalCliente" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -287,7 +287,7 @@
         </div>
     </div>
 
-    <!-- ============ MODAL ENVÍO ============ -->
+    <!-- modal envio -->
     <div class="modal fade" id="modalEnvio" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -407,7 +407,7 @@
         </div>
     </div>
 
-    <!-- ============ MODAL CONFIGURACIÓN FINANCIERA ============ -->
+    <!-- modal configuracion financiera -->
     <div class="modal fade" id="modalConfiguracion" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -497,19 +497,15 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
 <script>
-    // Estimación en vivo del costo de la ruta (modal "Crear Envío"), para
-    // que el administrador pueda cotizar el viaje al cliente antes de crearlo.
-    // Usa el mismo precio de combustible y margen de ganancia configurados en
-    // /configuracion, así que el estimado coincide con lo que realmente se
-    // guardará al crear la ruta (la ganancia es solo para cotizar, no se
-    // persiste en el envío).
+    // estimacion en vivo del costo de la ruta (modal crear envio), usa el
+    // mismo precio de combustible y margen configurados en /configuracion
+    // para que coincida con lo que se guarda al crear la ruta
     const PRECIO_COMBUSTIBLE = {{ precio_combustible }};
     const TIPO_GANANCIA = {{ tipo_ganancia|tojson }};
     const VALOR_GANANCIA = {{ valor_ganancia }};
 
-    // El campo de costo del flete se sugiere automáticamente con el total
-    // estimado, pero deja de auto-completarse en cuanto el admin lo edita a
-    // mano (acordó un precio distinto con el cliente).
+    // el campo de costo del flete se sugiere solo con el total estimado,
+    // pero deja de autocompletarse en cuanto el admin lo edita a mano
     let costoFleteEditadoManualmente = false;
     document.getElementById('envioCostoFlete').addEventListener('input', () => {
         costoFleteEditadoManualmente = true;
@@ -546,7 +542,7 @@
     document.getElementById('envioVehiculo').addEventListener('change', actualizarEstimacionRuta);
     document.getElementById('envioDistancia').addEventListener('input', actualizarEstimacionRuta);
 
-    // Ejemplo de cotización en vivo dentro del modal "Configuración Financiera".
+    // ejemplo de cotizacion en vivo dentro del modal de configuracion financiera
     const DISTANCIA_EJEMPLO = 100;
     const KML_EJEMPLO = 5;
     const CMK_EJEMPLO = 0.20;

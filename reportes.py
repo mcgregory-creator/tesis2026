@@ -1,7 +1,6 @@
 """
-Generación de reportes en PDF (reportlab) para rutas, choferes y resúmenes
-mensuales. Se mantiene separado de app.py para no mezclar las rutas Flask
-con el maquetado de los documentos.
+genera los pdf (reportlab) de rutas, choferes y resumenes mensuales.
+separado de app.py para no mezclar rutas flask con maquetado
 """
 from io import BytesIO
 
@@ -27,13 +26,12 @@ def _documento(titulo, pagesize=letter):
 
 
 def _tabla(encabezados, filas, anchos=None, resaltar_columna=None):
-    """Arma una tabla. Las celdas de texto se envuelven en Paragraph para que
-    un nombre largo (cliente, destino) haga salto de línea en vez de
-    desbordar la página cuando se usan `anchos` fijos.
+    """arma una tabla. las celdas de texto van en Paragraph para que un nombre
+    largo (cliente, destino) haga salto de linea en vez de desbordar cuando
+    hay anchos fijos.
 
-    `resaltar_columna`, si se indica, es el índice de la columna numérica que
-    se pinta en rojo en las filas donde su valor es negativo (para detectar
-    de un vistazo rutas que dieron pérdida).
+    resaltar_columna, si se pasa, es el indice de la columna que se pinta en
+    rojo cuando el valor es negativo (para ver de una las rutas con perdida)
     """
     filas_render = []
     comandos_extra = []
@@ -77,13 +75,9 @@ def _fecha(valor):
 
 
 def pdf_ruta(envio, bitacora, gastos_ruta):
-    """Resumen completo de una ruta: datos generales + bitácora de eventos.
-
-    Incluye el desglose financiero completo: costo operativo estimado
-    (combustible + mantenimiento), gastos reales registrados en bitácora
-    (gasolina adicional, peajes, fallas mecánicas), el costo del flete
-    cobrado al cliente y la ganancia neta resultante.
-    """
+    """resumen completo de una ruta: datos generales + bitacora de eventos.
+    incluye costo operativo, gastos reales de bitacora, costo del flete y
+    la ganancia neta"""
     buffer, doc, elementos = _documento(f"Ruta #{envio['id_envio']} — {envio['destino']}")
 
     costo_operativo = float(envio["costo_estimado_combustible"]) + float(envio["costo_estimado_mantenimiento"])
@@ -108,7 +102,7 @@ def pdf_ruta(envio, bitacora, gastos_ruta):
         ["Llegada", _fecha(envio["fecha_llegada"])],
     ]
     tabla_general = _tabla(["Campo", "Valor"], datos_generales)
-    fila_ganancia = 10  # 1 (encabezado) + índice de "Ganancia Neta del Flete"
+    fila_ganancia = 10  # encabezado + indice de "ganancia neta del flete"
     color_ganancia = colors.HexColor("#b02a37") if ganancia_neta < 0 else colors.HexColor("#146c43")
     tabla_general.setStyle(TableStyle([
         ("FONTNAME", (0, fila_ganancia), (-1, fila_ganancia), "Helvetica-Bold"),
@@ -139,13 +133,10 @@ def pdf_ruta(envio, bitacora, gastos_ruta):
 
 
 def pdf_chofer(nombre_chofer, envios):
-    """Todas las rutas de un chofer, con totales de productividad y financieros.
-
-    Las rutas Anuladas se listan (para trazabilidad) pero no cuentan en los
-    totales de km ni de costos: no se recorrieron ni se gastó en ellas.
-    Cada envío debe traer `costo_flete`, `gastos_ruta` (suma de bitácora) y su
-    desglose por categoría (`gastos_gasolina`, `gastos_peaje`, `gastos_falla`).
-    """
+    """todas las rutas de un chofer, con totales de productividad y plata.
+    las anuladas se listan pero no cuentan en los totales de km/costos.
+    cada envio debe traer costo_flete, gastos_ruta y su desglose
+    (gastos_gasolina, gastos_peaje, gastos_falla)"""
     buffer, doc, elementos = _documento(
         f"Reporte de rutas — {nombre_chofer}", pagesize=landscape(letter),
     )
@@ -206,14 +197,10 @@ def pdf_chofer(nombre_chofer, envios):
 
 
 def pdf_mes(anio, mes, envios):
-    """Todas las rutas de un mes calendario (todos los choferes), con totales
-    financieros incluida la ganancia neta del mes.
-
-    Las rutas Anuladas se listan (para trazabilidad) pero no cuentan en los
-    totales de km ni de costos: no se recorrieron ni se gastó en ellas.
-    Cada envío debe traer `costo_flete`, `gastos_ruta` (suma de bitácora) y su
-    desglose por categoría (`gastos_gasolina`, `gastos_peaje`, `gastos_falla`).
-    """
+    """todas las rutas de un mes calendario (todos los choferes), con la
+    ganancia neta del mes incluida.
+    las anuladas se listan pero no cuentan en los totales.
+    cada envio debe traer costo_flete, gastos_ruta y su desglose"""
     buffer, doc, elementos = _documento(
         f"Reporte mensual — {mes:02d}/{anio}", pagesize=landscape(letter),
     )
