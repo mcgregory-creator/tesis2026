@@ -1340,7 +1340,32 @@ def reporte_pdf_mes():
     return _pdf_response(buffer, f"reporte_{anio}_{mes:02d}.pdf")
 
 
-# arranque: crea el admin por defecto
+# arranque: carga el esquema si hace falta y crea el admin por defecto
+def _asegurar_esquema():
+    # si la base esta vacia (no existe la tabla usuarios) carga schema.sql.
+    # asi una base nueva (ej. render) queda lista sin correr psql a mano.
+    # en docker el esquema ya viene horneado, aca no hace nada.
+    with engine.begin() as conn:
+        # lock a nivel de transaccion: si arrancan varios workers de gunicorn a
+        # la vez (render usa 2), solo uno carga el esquema; el resto espera y
+        # al entrar ya encuentra las tablas.
+        conn.exec_driver_sql("SELECT pg_advisory_xact_lock(727274)")
+        existe = conn.execute(text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_name = 'usuarios'"
+        )).fetchone()
+        if existe:
+            return
+        ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+        with open(ruta, "r", encoding="utf-8") as f:
+            conn.exec_driver_sql(f.read())
+        # el header de schema.sql (formato pg_dump) deja el search_path vacio;
+        # lo restauramos para no romper las consultas que siguen ni dejar la
+        # conexion sucia al volver al pool.
+        conn.exec_driver_sql("RESET search_path")
+        print("Esquema cargado en la base de datos (schema.sql).")
+
+
 def inicializar_sistema():
     """crea el admin por defecto si no existe. reintenta varias veces por si
     la base de datos todavia esta arrancando (tipico con docker compose)"""
@@ -1350,6 +1375,7 @@ def inicializar_sistema():
     for intento in range(1, 16):
         try:
             with app.app_context():
+                _asegurar_esquema()
                 with engine.begin() as conn:
                     admin = conn.execute(
                         text("SELECT 1 FROM usuarios WHERE usuario = 'admin'")
