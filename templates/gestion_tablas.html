@@ -260,14 +260,24 @@
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Costo Mant. x Km ($)</label>
-                            <input type="number" step="0.01" class="form-control" name="costo_mantenimiento_km" value="{{ v['costo_mantenimiento_km'] }}" required>
+                            <label class="form-label">Costo del Último Mantenimiento ($)</label>
+                            <input type="number" step="0.01" class="form-control vehCostoUltimoMant"
+                                   name="costo_ultimo_mantenimiento" value="{{ v['costo_ultimo_mantenimiento'] }}"
+                                   data-vehiculo-id="{{ v['id_vehiculo'] }}" required>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Frecuencia Mant. (Km)</label>
-                            <input type="number" class="form-control" name="km_para_mantenimiento" value="{{ v['km_para_mantenimiento'] }}" required>
+                            <input type="number" class="form-control vehKmParaMantenimiento"
+                                   name="km_para_mantenimiento" value="{{ v['km_para_mantenimiento'] }}"
+                                   data-vehiculo-id="{{ v['id_vehiculo'] }}" required>
                         </div>
                     </div>
+                    <p class="text-muted small mb-3">
+                        Costo de mantenimiento por Km (se recalcula solo, es lo que se usa para cotizar rutas):
+                        <span class="vehCostoMantKmCalculado" data-vehiculo-id="{{ v['id_vehiculo'] }}">
+                            $ {{ '%.4f'|format(v['costo_mantenimiento_km']) }} / km
+                        </span>
+                    </p>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Vencimiento RCV</label>
@@ -415,4 +425,31 @@
 </div>
 {% endif %}
 {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // recalcula en vivo el costo de mantenimiento por km al editar un vehiculo:
+    // costo del ultimo mantenimiento / frecuencia de mantenimiento. usa
+    // delegacion de eventos porque hay un modal (y sus inputs) por vehiculo
+    function actualizarCostoMantKmEditar(idVehiculo) {
+        const costoUltimo = parseFloat(document.querySelector(
+            `.vehCostoUltimoMant[data-vehiculo-id="${idVehiculo}"]`
+        ).value);
+        const kmFrecuencia = parseFloat(document.querySelector(
+            `.vehKmParaMantenimiento[data-vehiculo-id="${idVehiculo}"]`
+        ).value);
+        let cmk = 0;
+        if (!isNaN(costoUltimo) && costoUltimo >= 0 && !isNaN(kmFrecuencia) && kmFrecuencia > 0) {
+            cmk = costoUltimo / kmFrecuencia;
+        }
+        document.querySelector(
+            `.vehCostoMantKmCalculado[data-vehiculo-id="${idVehiculo}"]`
+        ).innerText = `$ ${cmk.toFixed(4)} / km`;
+    }
+
+    document.querySelectorAll('.vehCostoUltimoMant, .vehKmParaMantenimiento').forEach((input) => {
+        input.addEventListener('input', () => actualizarCostoMantKmEditar(input.dataset.vehiculoId));
+    });
+</script>
 {% endblock %}

@@ -156,6 +156,13 @@ def _obtener_configuracion_financiera(conn):
     return fila
 
 
+def _costo_mantenimiento_km(costo_ultimo_mantenimiento, km_para_mantenimiento):
+    """tasa de mantenimiento por km, derivada de lo que costo el ultimo
+    mantenimiento repartido entre el intervalo (en km) hasta el proximo.
+    esta tasa es la que se guarda y se usa para cotizar rutas"""
+    return round(costo_ultimo_mantenimiento / km_para_mantenimiento, 2)
+
+
 def _calcular_costos_ruta(distancia, vehiculo, config_financiera):
     """costo de combustible y mantenimiento de la ruta (lo que se guarda en
     envios). no incluye la ganancia, esa es solo para cotizar y se calcula aparte"""
@@ -237,12 +244,19 @@ def auditar_acceso_sesion():
     # que siempre haya un token csrf para los templates
     _get_csrf_token()
 
-    # valida csrf en los metodos que cambian datos
+    # valida csrf en los metodos que cambian datos. si falla, lo normal es que
+    # la sesion ya haya expirado (pestaña vieja abierta por horas) mas que un
+    # ataque real, asi que en vez de la pagina fea de "bad request" se manda
+    # a iniciar sesion de nuevo
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         if not _validar_csrf():
             if request.path.startswith("/api/"):
                 return jsonify({"error": "Token CSRF inválido o ausente."}), 400
-            abort(400)
+            flash(
+                "Tu sesión expiró o la página quedó desactualizada. "
+                "Inicia sesión de nuevo e intenta otra vez.", "warning",
+            )
+            return redirect(url_for("login"))
 
     # login y estaticos son libres
     if request.endpoint == "login" or (
@@ -466,7 +480,8 @@ def gestion():
         )).mappings().fetchall()
         vehiculos = conn.execute(text(
             "SELECT id_vehiculo, placa, modelo, capacidad_carga, km_por_litro, "
-            "       costo_mantenimiento_km, km_para_mantenimiento, estado, "
+            "       costo_ultimo_mantenimiento, costo_mantenimiento_km, "
+            "       km_para_mantenimiento, estado, "
             "       vencimiento_rcv, vencimiento_impuesto_alcaldia "
             "FROM vehiculos ORDER BY placa"
         )).mappings().fetchall()
@@ -643,7 +658,7 @@ def agregar_vehiculo():
         placa = request.form["placa"].strip().upper()
         modelo = request.form["modelo"].strip()
         km_por_litro = float(request.form["km_por_litro"])
-        costo_mantenimiento_km = float(request.form["costo_mantenimiento_km"])
+        costo_ultimo_mantenimiento = float(request.form["costo_ultimo_mantenimiento"])
         km_para_mantenimiento = int(request.form["km_para_mantenimiento"])
         capacidad_raw = request.form.get("capacidad_carga", "").strip()
         capacidad_carga = float(capacidad_raw) if capacidad_raw else None
@@ -652,7 +667,7 @@ def agregar_vehiculo():
             raise ValueError("Placa y modelo son obligatorios.")
         if km_por_litro <= 0:
             raise ValueError("El rendimiento (Km/L) debe ser mayor que cero.")
-        if costo_mantenimiento_km < 0 or km_para_mantenimiento <= 0:
+        if costo_ultimo_mantenimiento < 0 or km_para_mantenimiento <= 0:
             raise ValueError("Los datos de mantenimiento deben ser válidos.")
         if capacidad_carga is not None and capacidad_carga < 0:
             raise ValueError("La capacidad de carga no puede ser negativa.")
@@ -660,18 +675,22 @@ def agregar_vehiculo():
         flash("Datos del vehículo inválidos. Revisa los campos numéricos.", "danger")
         return redirect(url_for("inicio"))
 
+    costo_mantenimiento_km = _costo_mantenimiento_km(costo_ultimo_mantenimiento, km_para_mantenimiento)
+
     try:
         with engine.begin() as conn:
             conn.execute(text(
                 "INSERT INTO vehiculos "
-                "(placa, modelo, capacidad_carga, km_por_litro, costo_mantenimiento_km, "
-                " km_para_mantenimiento, estado, vencimiento_rcv, vencimiento_impuesto_alcaldia) "
-                "VALUES (:placa, :modelo, :cap, :kml, :cmk, :kmm, 'Disponible', :rcv, :imp)"
+                "(placa, modelo, capacidad_carga, km_por_litro, costo_ultimo_mantenimiento, "
+                " costo_mantenimiento_km, km_para_mantenimiento, estado, vencimiento_rcv, "
+                " vencimiento_impuesto_alcaldia) "
+                "VALUES (:placa, :modelo, :cap, :kml, :cum, :cmk, :kmm, 'Disponible', :rcv, :imp)"
             ), {
                 "placa": placa,
                 "modelo": modelo,
                 "cap": capacidad_carga,
                 "kml": km_por_litro,
+                "cum": costo_ultimo_mantenimiento,
                 "cmk": costo_mantenimiento_km,
                 "kmm": km_para_mantenimiento,
                 "rcv": request.form.get("vencimiento_rcv") or None,
@@ -694,8 +713,9 @@ def crear_envio():
         id_chofer = int(request.form["id_chofer"])
         distancia = float(request.form["distancia_km"])
         costo_flete = float(request.form["costo_flete"])
-        if distancia <= 0:
-            raise ValueError("La distancia debe ser positiva.")
+        destino = request.form["destino"].strip()
+        if distancia <= 0 or not destino:
+            raise ValueError("Datos inválidos.")
         if costo_flete <= 0:
             raise ValueError("El costo del flete (cobrado al cliente) debe ser mayor que cero.")
     except (KeyError, ValueError):
@@ -759,7 +779,7 @@ def crear_envio():
                 "VALUES (:cli, :veh, :cho, :dest, :dist, :flete, :ccomb, :cmant, 'Pendiente')"
             ), {
                 "cli": id_cliente, "veh": id_vehiculo, "cho": id_chofer,
-                "dest": request.form["destino"].strip(), "dist": distancia,
+                "dest": destino, "dist": distancia,
                 "flete": costo_flete,
                 "ccomb": costo_combustible, "cmant": costo_mantenimiento,
             })
@@ -768,7 +788,7 @@ def crear_envio():
                 "UPDATE vehiculos SET estado = 'Asignado' WHERE id_vehiculo = :id"
             ), {"id": id_vehiculo})
 
-        flash(f"Ruta hacia {request.form['destino']} creada y asignada.", "success")
+        flash(f"Ruta hacia {destino} creada y asignada.", "success")
     except IntegrityError:
         flash("Error de integridad: cliente, vehículo o chofer inválido.", "danger")
     except SQLAlchemyError:
@@ -837,7 +857,7 @@ def editar_vehiculo(id_vehiculo):
         placa = request.form["placa"].strip().upper()
         modelo = request.form["modelo"].strip()
         km_por_litro = float(request.form["km_por_litro"])
-        costo_mantenimiento_km = float(request.form["costo_mantenimiento_km"])
+        costo_ultimo_mantenimiento = float(request.form["costo_ultimo_mantenimiento"])
         km_para_mantenimiento = int(request.form["km_para_mantenimiento"])
         capacidad_raw = request.form.get("capacidad_carga", "").strip()
         capacidad_carga = float(capacidad_raw) if capacidad_raw else None
@@ -847,7 +867,7 @@ def editar_vehiculo(id_vehiculo):
             raise ValueError("Placa y modelo son obligatorios.")
         if km_por_litro <= 0:
             raise ValueError("El rendimiento (Km/L) debe ser mayor que cero.")
-        if costo_mantenimiento_km < 0 or km_para_mantenimiento <= 0:
+        if costo_ultimo_mantenimiento < 0 or km_para_mantenimiento <= 0:
             raise ValueError("Los datos de mantenimiento deben ser válidos.")
         if capacidad_carga is not None and capacidad_carga < 0:
             raise ValueError("La capacidad de carga no puede ser negativa.")
@@ -879,16 +899,20 @@ def editar_vehiculo(id_vehiculo):
             else:
                 estado_final = estado_solicitado
 
+            costo_mantenimiento_km = _costo_mantenimiento_km(costo_ultimo_mantenimiento, km_para_mantenimiento)
+
             conn.execute(text(
                 "UPDATE vehiculos SET placa = :placa, modelo = :modelo, "
                 "capacidad_carga = :cap, km_por_litro = :kml, "
-                "costo_mantenimiento_km = :cmk, km_para_mantenimiento = :kmm, "
+                "costo_ultimo_mantenimiento = :cum, costo_mantenimiento_km = :cmk, "
+                "km_para_mantenimiento = :kmm, "
                 "vencimiento_rcv = :rcv, vencimiento_impuesto_alcaldia = :imp, "
                 "estado = :estado "
                 "WHERE id_vehiculo = :id"
             ), {
                 "placa": placa, "modelo": modelo, "cap": capacidad_carga,
-                "kml": km_por_litro, "cmk": costo_mantenimiento_km,
+                "kml": km_por_litro, "cum": costo_ultimo_mantenimiento,
+                "cmk": costo_mantenimiento_km,
                 "kmm": km_para_mantenimiento,
                 "rcv": request.form.get("vencimiento_rcv") or None,
                 "imp": request.form.get("vencimiento_impuesto_alcaldia") or None,

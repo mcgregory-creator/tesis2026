@@ -168,6 +168,7 @@ CREATE TABLE public.vehiculos (
     modelo character varying(100) NOT NULL,
     capacidad_carga numeric(8,2),
     km_por_litro numeric(8,2) NOT NULL,
+    costo_ultimo_mantenimiento numeric(12,2) DEFAULT 0 NOT NULL,
     costo_mantenimiento_km numeric(12,2) NOT NULL,
     km_para_mantenimiento integer NOT NULL,
     estado character varying(30) DEFAULT 'Disponible'::character varying,
