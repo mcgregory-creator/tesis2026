@@ -104,40 +104,6 @@
         </div>
     </div>
 
-    <!-- productividad: grafico y rankings -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="mb-0">Productividad</h3>
-        <a href="{{ url_for('graficos') }}" class="btn btn-outline-primary">Ver todos los gráficos</a>
-    </div>
-    <div class="row g-4 mb-5">
-        <div class="col-lg-7">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title">Viajes entregados por mes (año actual)</h5>
-                    <canvas id="graficoViajesMes" height="220"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-5">
-            <div class="card h-100 shadow-sm mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Top 5 destinos más frecuentes</h5>
-                    <ol id="listaTopDestinos" class="list-group list-group-numbered list-group-flush">
-                        <li class="list-group-item text-muted">Cargando…</li>
-                    </ol>
-                </div>
-            </div>
-            <div class="card h-100 shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title">Top 5 choferes con más viajes</h5>
-                    <ol id="listaTopChoferes" class="list-group list-group-numbered list-group-flush">
-                        <li class="list-group-item text-muted">Cargando…</li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- modal chofer -->
     <div class="modal fade" id="modalChofer" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -499,7 +465,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
 <script>
     // estimacion en vivo del costo de la ruta (modal crear envio), usa el
     // mismo precio de combustible y margen configurados en /configuracion
@@ -593,51 +558,5 @@
     document.getElementById('cfgTipoFijo').addEventListener('change', actualizarEjemploConfiguracion);
     actualizarEjemploConfiguracion();
 
-    const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-
-    function pintarLista(idLista, datos, etiquetaVacia, campoNombre) {
-        const lista = document.getElementById(idLista);
-        lista.innerHTML = "";
-        if (!datos.length) {
-            lista.innerHTML = `<li class="list-group-item text-muted">${etiquetaVacia}</li>`;
-            return;
-        }
-        datos.forEach(fila => {
-            const item = document.createElement("li");
-            item.className = "list-group-item d-flex justify-content-between align-items-center";
-            item.innerHTML = `${fila[campoNombre]} <span class="badge bg-primary rounded-pill">${fila.total}</span>`;
-            lista.appendChild(item);
-        });
-    }
-
-    fetch('/api/estadisticas')
-        .then(respuesta => respuesta.json())
-        .then(datos => {
-            new Chart(document.getElementById('graficoViajesMes'), {
-                type: 'bar',
-                data: {
-                    labels: MESES,
-                    datasets: [{
-                        label: 'Viajes entregados',
-                        data: datos.viajes_por_mes,
-                        backgroundColor: '#0d6efd',
-                    }],
-                },
-                options: {
-                    responsive: true,
-                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
-                    plugins: { legend: { display: false } },
-                },
-            });
-
-            pintarLista('listaTopDestinos', datos.top_destinos, 'Aún no hay viajes entregados.', 'destino');
-            pintarLista('listaTopChoferes', datos.top_choferes, 'Aún no hay viajes entregados.', 'nombre_completo');
-        })
-        .catch(() => {
-            document.getElementById('listaTopDestinos').innerHTML =
-                '<li class="list-group-item text-danger">No se pudieron cargar las estadísticas.</li>';
-            document.getElementById('listaTopChoferes').innerHTML =
-                '<li class="list-group-item text-danger">No se pudieron cargar las estadísticas.</li>';
-        });
 </script>
 {% endblock %}

@@ -6,7 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0">Ruta #{{ envio['id_envio'] }} — {{ envio['destino'] }}</h2>
     <div>
-        <a href="{{ url_for('gestion') }}" class="btn btn-secondary">Volver a Gestión</a>
+        <a href="{{ url_for('gestion') }}#rutas" class="btn btn-secondary">Volver a Gestión</a>
         <a href="{{ url_for('reporte_pdf_ruta', id_envio=envio['id_envio']) }}" class="btn btn-outline-primary">
             📄 Descargar PDF
         </a>
