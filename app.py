@@ -1526,6 +1526,22 @@ def graficos():
     return render_template("graficos.html")
 
 
+@app.route("/manual")
+def manual_usuario():
+    """sirve el manual de usuario en pdf. Content-Disposition inline para que
+    el navegador lo abra en pestaña propia en vez de descargarlo cada vez"""
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Manual_de_Usuario.pdf")
+    if not os.path.exists(ruta):
+        abort(404)
+    with open(ruta, "rb") as f:
+        contenido = f.read()
+    return Response(
+        contenido,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": "inline; filename=Manual_de_Usuario.pdf"},
+    )
+
+
 # reportes en pdf: por ruta, por chofer, por mes
 MESES_ES = [
     (1, "Enero"), (2, "Febrero"), (3, "Marzo"), (4, "Abril"),

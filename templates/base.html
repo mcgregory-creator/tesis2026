@@ -61,6 +61,20 @@
                         {% endif %}
                     </ul>
                 </div>
+                <div class="dropdown">
+                    <button type="button" class="btn btn-outline-light btn-sm dropdown-toggle"
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        Ayuda
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('manual_usuario') }}"
+                               target="_blank" rel="noopener">
+                                Manual de Usuario
+                            </a>
+                        </li>
+                    </ul>
+                </div>
                 <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Cerrar Sesión</a>
             </div>
         </div>
