@@ -52,7 +52,7 @@
                                 </button>
                                 {% if ch['estado'] == 'Activo' %}
                                     <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#modalEstadoChofer{{ ch['id_usuario'] }}">
-                                        Inactivo
+                                        Desactivar
                                     </button>
                                 {% else %}
                                     <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalEstadoChofer{{ ch['id_usuario'] }}">
@@ -100,7 +100,7 @@
                                     </button>
                                 {% else %}
                                     <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#modalEstadoVehiculo{{ v['id_vehiculo'] }}">
-                                        Inactivo
+                                        Desactivar
                                     </button>
                                 {% endif %}
                             </td>
