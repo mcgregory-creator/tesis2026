@@ -323,6 +323,27 @@ ALTER TABLE ONLY public.historial_estado
     ADD CONSTRAINT historial_estado_pkey PRIMARY KEY (id_historial);
 
 
+--
+-- Name: intentos_login; Type: TABLE; Schema: public; Owner: -
+--
+-- limite de intentos de login, contado por la pareja usuario+ip. si llega al
+-- limite, bloqueado_hasta queda con la fecha hasta la que no puede intentar
+-- de nuevo esa combinacion
+--
+
+CREATE TABLE public.intentos_login (
+    usuario character varying(50) NOT NULL,
+    ip character varying(45) NOT NULL,
+    intentos integer DEFAULT 1 NOT NULL,
+    ultimo_intento timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    bloqueado_hasta timestamp without time zone
+);
+
+
+ALTER TABLE ONLY public.intentos_login
+    ADD CONSTRAINT intentos_login_pkey PRIMARY KEY (usuario, ip);
+
+
 -- indices de rendimiento: postgres no los crea solo para llaves foraneas
 -- (solo para la primaria). sin esto, los join/where por chofer, vehiculo,
 -- estado o fecha, y la suma de gastos por ruta, escanean toda la tabla

@@ -1,6 +1,6 @@
 import os
 import secrets
-from datetime import date
+from datetime import date, datetime, timedelta
 
 # carga variables de .env si python-dotenv esta instalado
 try:
@@ -23,6 +23,13 @@ import reportes
 app = Flask(__name__)
 
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
+
+# detras de un proxy (render) la conexion real le llega al proxy, no a la app;
+# sin esto request.remote_addr siempre daria la ip interna del proxy y el
+# limite de intentos de login terminaria agrupando a todos los usuarios bajo
+# una sola ip. x_for=1 confia en un solo salto de proxy (el de render)
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
 # endurece la cookie de sesion
 app.config.update(
@@ -315,6 +322,59 @@ def solo_admin():
         abort(403)
 
 
+# limite de intentos de login, contado por la pareja usuario+ip (asi nadie
+# puede bloquear al usuario real fallando a proposito desde otra ip)
+LIMITE_INTENTOS_LOGIN = 5
+BLOQUEO_LOGIN_MINUTOS = 15
+
+
+def _ip_cliente():
+    return request.remote_addr or "desconocida"
+
+
+def _login_bloqueado_hasta(conn, usuario, ip):
+    """devuelve el datetime hasta el que sigue bloqueado, o None si puede intentar"""
+    fila = conn.execute(text(
+        "SELECT bloqueado_hasta FROM intentos_login WHERE usuario = :u AND ip = :i"
+    ), {"u": usuario, "i": ip}).mappings().fetchone()
+    if fila and fila["bloqueado_hasta"] and fila["bloqueado_hasta"] > datetime.utcnow():
+        return fila["bloqueado_hasta"]
+    return None
+
+
+def _registrar_intento_fallido(conn, usuario, ip):
+    """suma un intento fallido y bloquea la pareja usuario+ip si llega al limite"""
+    fila = conn.execute(text(
+        "SELECT intentos, bloqueado_hasta FROM intentos_login "
+        "WHERE usuario = :u AND ip = :i FOR UPDATE"
+    ), {"u": usuario, "i": ip}).mappings().fetchone()
+
+    ahora = datetime.utcnow()
+    # si no hay registro previo, o el bloqueo anterior ya vencio, se arranca de nuevo
+    if fila is None or (fila["bloqueado_hasta"] and fila["bloqueado_hasta"] <= ahora):
+        intentos = 1
+    else:
+        intentos = fila["intentos"] + 1
+
+    bloqueado_hasta = (
+        ahora + timedelta(minutes=BLOQUEO_LOGIN_MINUTOS)
+        if intentos >= LIMITE_INTENTOS_LOGIN else None
+    )
+    conn.execute(text(
+        "INSERT INTO intentos_login (usuario, ip, intentos, ultimo_intento, bloqueado_hasta) "
+        "VALUES (:u, :i, :n, :ahora, :bh) "
+        "ON CONFLICT (usuario, ip) DO UPDATE SET "
+        "intentos = :n, ultimo_intento = :ahora, bloqueado_hasta = :bh"
+    ), {"u": usuario, "i": ip, "n": intentos, "ahora": ahora, "bh": bloqueado_hasta})
+    return intentos, bloqueado_hasta
+
+
+def _limpiar_intentos_login(conn, usuario, ip):
+    conn.execute(text(
+        "DELETE FROM intentos_login WHERE usuario = :u AND ip = :i"
+    ), {"u": usuario, "i": ip})
+
+
 # autenticacion
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -324,7 +384,18 @@ def login():
     if request.method == "POST":
         usuario_ingresado = request.form.get("usuario", "")
         password_ingresado = request.form.get("password", "")
-        with engine.connect() as conn:
+        ip = _ip_cliente()
+
+        with engine.begin() as conn:
+            bloqueado_hasta = _login_bloqueado_hasta(conn, usuario_ingresado, ip)
+            if bloqueado_hasta:
+                minutos_restantes = max(1, int((bloqueado_hasta - datetime.utcnow()).total_seconds() // 60) + 1)
+                flash(
+                    f"Demasiados intentos fallidos. Vuelve a intentar en "
+                    f"{minutos_restantes} minuto(s).", "danger",
+                )
+                return render_template("login.html")
+
             consulta = text(
                 "SELECT * FROM usuarios WHERE usuario = :user AND estado = 'Activo'"
             )
@@ -332,7 +403,13 @@ def login():
                 consulta, {"user": usuario_ingresado}
             ).mappings().fetchone()
 
-        if user and check_password_hash(user["password"], password_ingresado):
+            if user and check_password_hash(user["password"], password_ingresado):
+                _limpiar_intentos_login(conn, usuario_ingresado, ip)
+            else:
+                _registrar_intento_fallido(conn, usuario_ingresado, ip)
+                user = None
+
+        if user:
             # regenera el token csrf al loguear (evita fijacion de sesion)
             session.clear()
             session["_csrf_token"] = secrets.token_hex(32)
@@ -1687,6 +1764,16 @@ _MIGRACIONES = [
 
     "CREATE INDEX IF NOT EXISTS idx_historial_estado_recurso "
     "ON historial_estado (tipo_recurso, id_recurso)",
+
+    # limite de intentos de login: se cuenta por la pareja usuario+ip, asi
+    # nadie puede bloquear al usuario real inundando intentos desde otra ip
+    "CREATE TABLE IF NOT EXISTS intentos_login ("
+    " usuario character varying(50) NOT NULL,"
+    " ip character varying(45) NOT NULL,"
+    " intentos integer NOT NULL DEFAULT 1,"
+    " ultimo_intento timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,"
+    " bloqueado_hasta timestamp without time zone,"
+    " PRIMARY KEY (usuario, ip))",
 ]
 
 
