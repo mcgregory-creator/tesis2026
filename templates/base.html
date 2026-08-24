@@ -42,9 +42,25 @@
             {% endif %}
             <div class="d-flex align-items-center flex-wrap gap-2">
                 <span class="text-white me-2">Hola, {{ session['nombre'] }}</span>
-                <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalCambiarPassword">
-                    Mi Cuenta
-                </button>
+                <div class="dropdown">
+                    <button type="button" class="btn btn-outline-light btn-sm dropdown-toggle"
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        Mi Cuenta
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <button type="button" class="dropdown-item"
+                                    data-bs-toggle="modal" data-bs-target="#modalCambiarPassword">
+                                Cambiar clave
+                            </button>
+                        </li>
+                        {% if session['rol'] == 'Administrador' %}
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('empleados') }}">Empleados</a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
                 <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Cerrar Sesión</a>
             </div>
         </div>
@@ -102,6 +118,7 @@
 </div>
 
 <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/paginacion.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

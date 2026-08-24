@@ -27,7 +27,7 @@
 
         <div class="tab-pane fade show active" id="choferes">
             <div class="table-responsive">
-                <table class="table table-striped table-hover table-bordered align-middle">
+                <table class="table table-striped table-hover table-bordered align-middle tabla-paginada">
                     <thead class="table-dark">
                         <tr>
                             <th>Nombre Completo</th>
@@ -62,7 +62,7 @@
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="5" class="text-center text-muted">Sin choferes registrados.</td></tr>
+                        <tr data-vacio="1"><td colspan="5" class="text-center text-muted">Sin choferes registrados.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -71,7 +71,7 @@
 
         <div class="tab-pane fade" id="vehiculos">
             <div class="table-responsive">
-                <table class="table table-striped table-hover table-bordered align-middle">
+                <table class="table table-striped table-hover table-bordered align-middle tabla-paginada">
                     <thead class="table-dark">
                         <tr>
                             <th>Placa</th>
@@ -106,7 +106,7 @@
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="6" class="text-center text-muted">Sin vehículos registrados.</td></tr>
+                        <tr data-vacio="1"><td colspan="6" class="text-center text-muted">Sin vehículos registrados.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -115,7 +115,7 @@
 
         <div class="tab-pane fade" id="rutas">
             <div class="table-responsive">
-                <table class="table table-striped table-hover table-bordered align-middle">
+                <table class="table table-striped table-hover table-bordered align-middle tabla-paginada">
                     <thead class="table-dark">
                         <tr>
                             <th>ID Envío</th>
@@ -163,7 +163,7 @@
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="7" class="text-center text-muted">Sin envíos registrados.</td></tr>
+                        <tr data-vacio="1"><td colspan="7" class="text-center text-muted">Sin envíos registrados.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

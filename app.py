@@ -665,6 +665,38 @@ def empleados():
     return render_template("lista_usuarios.html", titulo="Empleados", usuarios=lista)
 
 
+@app.route("/agregar_empleado", methods=["POST"])
+def agregar_empleado():
+    """registra un usuario administrativo (rol Administrador). a diferencia del
+    chofer no lleva documentos legales, solo nombre, usuario y clave"""
+    solo_admin()
+    try:
+        nombre_completo = request.form["nombre_completo"].strip()
+        usuario_login = request.form["usuario"].strip()
+        password = request.form["password"]
+        if not nombre_completo or not usuario_login or not password:
+            raise ValueError("Nombre, usuario y contraseña son obligatorios.")
+        if len(password) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres.")
+        password_hash = generate_password_hash(password)
+    except (KeyError, ValueError) as error:
+        flash(f"Datos del empleado inválidos: {error}", "danger")
+        return redirect(url_for("empleados"))
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO usuarios (nombre_completo, usuario, password, rol, estado) "
+                "VALUES (:nombre, :usuario, :pwd, 'Administrador', 'Activo')"
+            ), {"nombre": nombre_completo, "usuario": usuario_login, "pwd": password_hash})
+        flash(f"Empleado {nombre_completo} registrado exitosamente.", "success")
+    except IntegrityError:
+        flash("El nombre de usuario ya existe. Elige otro.", "danger")
+    except SQLAlchemyError:
+        flash("No se pudo registrar el empleado.", "danger")
+    return redirect(url_for("empleados"))
+
+
 @app.route("/choferes")
 def choferes():
     solo_admin()
