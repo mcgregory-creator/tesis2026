@@ -140,7 +140,8 @@ CREATE TABLE public.usuarios (
     debe_cambiar_clave boolean DEFAULT false NOT NULL,
     vencimiento_licencia date,
     vencimiento_certificado_medico date,
-    vencimiento_cedula date
+    vencimiento_cedula date,
+    fecha_registro timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -173,7 +174,8 @@ CREATE TABLE public.vehiculos (
     km_para_mantenimiento integer NOT NULL,
     estado character varying(30) DEFAULT 'Disponible'::character varying,
     vencimiento_rcv date,
-    vencimiento_impuesto_alcaldia date
+    vencimiento_impuesto_alcaldia date,
+    fecha_registro timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -287,6 +289,40 @@ ALTER TABLE ONLY public.envios
     ADD CONSTRAINT envios_id_vehiculo_fkey FOREIGN KEY (id_vehiculo) REFERENCES public.vehiculos(id_vehiculo) ON DELETE RESTRICT;
 
 
+--
+-- Name: historial_estado; Type: TABLE; Schema: public; Owner: -
+--
+-- bitacora de activaciones/inactivaciones de choferes y vehiculos. guarda el
+-- motivo que pide el sistema al pulsar Inactivar/Activar, con su fecha, para
+-- poder armar el historial que se ve en Detalles
+--
+
+CREATE TABLE public.historial_estado (
+    id_historial integer NOT NULL,
+    tipo_recurso character varying(10) NOT NULL,
+    id_recurso integer NOT NULL,
+    accion character varying(20) NOT NULL,
+    motivo text NOT NULL,
+    fecha_registro timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT historial_estado_tipo_check CHECK ((tipo_recurso)::text = ANY ((ARRAY['Chofer'::character varying, 'Vehiculo'::character varying])::text[])),
+    CONSTRAINT historial_estado_accion_check CHECK ((accion)::text = ANY ((ARRAY['Inactivacion'::character varying, 'Reactivacion'::character varying])::text[]))
+);
+
+
+ALTER TABLE public.historial_estado ALTER COLUMN id_historial ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.historial_estado_id_historial_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+ALTER TABLE ONLY public.historial_estado
+    ADD CONSTRAINT historial_estado_pkey PRIMARY KEY (id_historial);
+
+
 -- indices de rendimiento: postgres no los crea solo para llaves foraneas
 -- (solo para la primaria). sin esto, los join/where por chofer, vehiculo,
 -- estado o fecha, y la suma de gastos por ruta, escanean toda la tabla
@@ -297,6 +333,7 @@ CREATE INDEX idx_envios_id_vehiculo ON public.envios USING btree (id_vehiculo);
 CREATE INDEX idx_envios_estado_envio ON public.envios USING btree (estado_envio);
 CREATE INDEX idx_envios_fecha_creacion ON public.envios USING btree (fecha_creacion);
 CREATE INDEX idx_envios_fecha_llegada ON public.envios USING btree (fecha_llegada);
+CREATE INDEX idx_historial_estado_recurso ON public.historial_estado USING btree (tipo_recurso, id_recurso);
 
 -- fila unica de configuracion financiera (valores por defecto)
 

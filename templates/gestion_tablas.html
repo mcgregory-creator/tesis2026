@@ -3,6 +3,10 @@
 {% block title %}Gestión de Tablas{% endblock %}
 
 {% block content %}
+{# los 4 estados de la tabla vienen calculados desde app.py (estado_visual) #}
+{% macro badge_estado(texto, color) -%}
+<span class="badge bg-{{ color }}{% if color == 'warning' %} text-dark{% endif %}">{{ texto }}</span>
+{%- endmacro %}
 <div class="container mt-4">
     <h2>Tablas de Sistema</h2>
     <p class="text-muted">Administración y consulta de registros.</p>
@@ -26,7 +30,6 @@
                 <table class="table table-striped table-hover table-bordered align-middle">
                     <thead class="table-dark">
                         <tr>
-                            <th>ID</th>
                             <th>Nombre Completo</th>
                             <th>Usuario</th>
                             <th>Licencia (Vence)</th>
@@ -37,25 +40,29 @@
                     <tbody>
                         {% for ch in choferes %}
                         <tr>
-                            <td>{{ ch['id_usuario'] }}</td>
                             <td>{{ ch['nombre_completo'] }}</td>
                             <td>{{ ch['usuario'] }}</td>
-                            <td>{{ ch['vencimiento_licencia'] or '—' }}</td>
-                            <td>
-                                {% if ch['estado'] == 'Activo' %}
-                                    <span class="badge bg-success">Activo</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">{{ ch['estado'] }}</span>
-                                {% endif %}
+                            <td class="{% if ch['lic_vencida'] %}text-danger fw-bold{% endif %}">
+                                {{ ch['vencimiento_licencia'] or '—' }}
                             </td>
-                            <td>
+                            <td>{{ badge_estado(ch['estado_visual'], ch['estado_color']) }}</td>
+                            <td class="text-nowrap">
                                 <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditarChofer{{ ch['id_usuario'] }}">
-                                    Editar
+                                    Detalles
                                 </button>
+                                {% if ch['estado'] == 'Activo' %}
+                                    <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#modalEstadoChofer{{ ch['id_usuario'] }}">
+                                        Inactivo
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalEstadoChofer{{ ch['id_usuario'] }}">
+                                        Activar
+                                    </button>
+                                {% endif %}
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="6" class="text-center text-muted">Sin choferes registrados.</td></tr>
+                        <tr><td colspan="5" class="text-center text-muted">Sin choferes registrados.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -82,19 +89,20 @@
                             <td>{{ v['modelo'] }}</td>
                             <td>{{ v['capacidad_carga'] or '—' }}</td>
                             <td>{{ v['km_por_litro'] }}</td>
-                            <td>
-                                {% if v['estado'] == 'Disponible' %}
-                                    <span class="badge bg-success">Disponible</span>
-                                {% elif v['estado'] == 'Asignado' %}
-                                    <span class="badge bg-warning text-dark">Asignado</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">{{ v['estado'] }}</span>
-                                {% endif %}
-                            </td>
-                            <td>
+                            <td>{{ badge_estado(v['estado_visual'], v['estado_color']) }}</td>
+                            <td class="text-nowrap">
                                 <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditarVehiculo{{ v['id_vehiculo'] }}">
-                                    Editar
+                                    Detalles
                                 </button>
+                                {% if v['estado'] == 'Fuera de Servicio' %}
+                                    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalEstadoVehiculo{{ v['id_vehiculo'] }}">
+                                        Activar
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#modalEstadoVehiculo{{ v['id_vehiculo'] }}">
+                                        Inactivo
+                                    </button>
+                                {% endif %}
                             </td>
                         </tr>
                         {% else %}
@@ -170,7 +178,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Editar Chofer — {{ ch['nombre_completo'] }}</h5>
+                <h5 class="modal-title">Detalles del Chofer — {{ ch['nombre_completo'] }}</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form action="{{ url_for('editar_chofer', id_usuario=ch['id_usuario']) }}" method="POST">
@@ -188,11 +196,12 @@
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Estado</label>
-                            <select class="form-select" name="estado">
-                                <option value="Activo" {% if ch['estado'] == 'Activo' %}selected{% endif %}>Activo</option>
-                                <option value="Inactivo" {% if ch['estado'] == 'Inactivo' %}selected{% endif %}>Inactivo</option>
-                            </select>
+                            <label class="form-label">Estado actual</label>
+                            <div>{{ badge_estado(ch['estado_visual'], ch['estado_color']) }}</div>
+                            <p class="text-muted small mb-0">
+                                Se cambia con el botón Activar/Inactivo de la tabla, que pide
+                                el motivo y lo deja registrado.
+                            </p>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Nueva contraseña (opcional)</label>
@@ -204,17 +213,64 @@
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Licencia</label>
-                            <input type="date" class="form-control" name="vencimiento_licencia" value="{{ ch['vencimiento_licencia'] or '' }}">
+                            <input type="date" class="form-control {% if ch['lic_vencida'] %}is-invalid{% endif %}"
+                                   name="vencimiento_licencia" value="{{ ch['vencimiento_licencia'] or '' }}">
+                            {% if ch['lic_vencida'] %}<div class="invalid-feedback d-block">Vencida o sin registrar.</div>{% endif %}
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Certificado Médico</label>
-                            <input type="date" class="form-control" name="vencimiento_certificado_medico" value="{{ ch['vencimiento_certificado_medico'] or '' }}">
+                            <input type="date" class="form-control {% if ch['med_vencida'] %}is-invalid{% endif %}"
+                                   name="vencimiento_certificado_medico" value="{{ ch['vencimiento_certificado_medico'] or '' }}">
+                            {% if ch['med_vencida'] %}<div class="invalid-feedback d-block">Vencido o sin registrar.</div>{% endif %}
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Cédula</label>
-                            <input type="date" class="form-control" name="vencimiento_cedula" value="{{ ch['vencimiento_cedula'] or '' }}">
+                            <input type="date" class="form-control {% if ch['ced_vencida'] %}is-invalid{% endif %}"
+                                   name="vencimiento_cedula" value="{{ ch['vencimiento_cedula'] or '' }}">
+                            {% if ch['ced_vencida'] %}<div class="invalid-feedback d-block">Vencida o sin registrar.</div>{% endif %}
                         </div>
                     </div>
+
+                    {% if ch['estado_visual'] == 'Documentos' %}
+                    <div class="alert alert-warning py-2">
+                        Tiene documentos vencidos, por eso no aparece en los formularios de
+                        asignación de rutas. Corrige las fechas marcadas en rojo.
+                    </div>
+                    {% endif %}
+                    <hr>
+                    <h6 class="text-muted mb-3">Resumen</h6>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label small text-muted mb-0">Fecha de registro</label>
+                            <div>{{ ch['fecha_registro'].strftime('%d-%m-%Y') if ch['fecha_registro'] else '—' }}</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label small text-muted mb-0">Fecha de inactivación</label>
+                            <div>{{ ch['fecha_inactivacion'].strftime('%d-%m-%Y') if ch['fecha_inactivacion'] else '—' }}</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label small text-muted mb-0">Motivo de inactivación</label>
+                            <div>{{ ch['motivo_inactivacion'] or '—' }}</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label small text-muted mb-0">Cantidad de rutas</label>
+                            <div>{{ ch['total_rutas'] }}</div>
+                        </div>
+                    </div>
+                    <label class="form-label small text-muted">Historial de estado</label>
+                    {% if ch['historial'] %}
+                    <ul class="list-group list-group-flush mb-0">
+                        {% for ev in ch['historial'] %}
+                        <li class="list-group-item px-0 py-1">
+                            <span class="fw-bold">{{ ev['fecha_registro'].strftime('%d-%m-%Y') }}</span>
+                            <span class="badge bg-{{ 'success' if ev['accion'] == 'Reactivacion' else 'danger' }} ms-1">{{ 'Reincorporación' if ev['accion'] == 'Reactivacion' else 'Inactivación' }}</span>
+                            — {{ ev['motivo'] }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted small mb-0">Sin movimientos de estado registrados.</p>
+                    {% endif %}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -226,13 +282,76 @@
 </div>
 {% endfor %}
 
+<!-- modales de cambio de estado: choferes. piden el motivo, que queda en el historial -->
+{% for ch in choferes %}
+{% set inactivando = ch['estado'] == 'Activo' %}
+<div class="modal fade" id="modalEstadoChofer{{ ch['id_usuario'] }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header {{ 'bg-danger' if inactivando else 'bg-success' }} text-white">
+                <h5 class="modal-title">
+                    {{ 'Inactivar chofer' if inactivando else 'Activar chofer' }} — {{ ch['nombre_completo'] }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('cambiar_estado_chofer', id_usuario=ch['id_usuario']) }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="accion" value="{{ 'inactivar' if inactivando else 'activar' }}">
+                    {% if inactivando and ch['rutas_activas'] %}
+                    <div class="alert alert-warning">
+                        No se puede desactivar: tiene una ruta asignada o en curso.
+                        Finaliza o anula esa ruta primero.
+                    </div>
+                    {% endif %}
+                    <label class="form-label">
+                        Motivo {{ 'de la inactivación' if inactivando else 'de la reincorporación' }}
+                    </label>
+                    <input type="text" class="form-control" name="motivo" maxlength="300" required
+                           list="{{ 'motivosBajaChofer' if inactivando else 'motivosAlta' }}"
+                           placeholder="{{ 'Ej: reposo médico, vacaciones, despido' if inactivando else 'Ej: reincorporación' }}">
+                    <p class="text-muted small mt-2 mb-0">
+                        Queda guardado en el historial con la fecha de hoy.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn {{ 'btn-danger' if inactivando else 'btn-success' }}">
+                        {{ 'Inactivar' if inactivando else 'Activar' }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<datalist id="motivosBajaChofer">
+    <option value="Reposo médico"></option>
+    <option value="Vacaciones"></option>
+    <option value="Despido"></option>
+    <option value="Suspensión"></option>
+</datalist>
+<datalist id="motivosBajaVehiculo">
+    <option value="Mantenimiento programado"></option>
+    <option value="Avería mecánica"></option>
+    <option value="Documentos en trámite"></option>
+    <option value="Fuera de servicio"></option>
+</datalist>
+<datalist id="motivosAlta">
+    <option value="Reincorporación"></option>
+    <option value="Fin de reposo médico"></option>
+    <option value="Fin de vacaciones"></option>
+    <option value="Mantenimiento finalizado"></option>
+</datalist>
+
 <!-- modales de edicion: vehiculos -->
 {% for v in vehiculos %}
 <div class="modal fade" id="modalEditarVehiculo{{ v['id_vehiculo'] }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
-                <h5 class="modal-title">Editar Vehículo — {{ v['placa'] }}</h5>
+                <h5 class="modal-title">Detalles del Vehículo — {{ v['placa'] }}</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form action="{{ url_for('editar_vehiculo', id_vehiculo=v['id_vehiculo']) }}" method="POST">
@@ -281,31 +400,114 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Vencimiento RCV</label>
-                            <input type="date" class="form-control" name="vencimiento_rcv" value="{{ v['vencimiento_rcv'] or '' }}">
+                            <input type="date" class="form-control {% if v['rcv_vencido'] %}is-invalid{% endif %}"
+                                   name="vencimiento_rcv" value="{{ v['vencimiento_rcv'] or '' }}">
+                            {% if v['rcv_vencido'] %}<div class="invalid-feedback d-block">RCV vencido o sin registrar.</div>{% endif %}
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Impuesto Alcaldía</label>
-                            <input type="date" class="form-control" name="vencimiento_impuesto_alcaldia" value="{{ v['vencimiento_impuesto_alcaldia'] or '' }}">
+                            <input type="date" class="form-control {% if v['imp_vencido'] %}is-invalid{% endif %}"
+                                   name="vencimiento_impuesto_alcaldia" value="{{ v['vencimiento_impuesto_alcaldia'] or '' }}">
+                            {% if v['imp_vencido'] %}<div class="invalid-feedback d-block">Impuesto vencido o sin registrar.</div>{% endif %}
                         </div>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label">Estado</label>
-                        {% if v['estado'] == 'Asignado' %}
-                            <input type="text" class="form-control" value="Asignado (en ruta activa)" disabled>
-                            <p class="text-muted small mb-0">
-                                No se puede cambiar el estado mientras el vehículo está en una ruta activa.
-                            </p>
-                        {% else %}
-                            <select class="form-select" name="estado">
-                                <option value="Disponible" {% if v['estado'] == 'Disponible' %}selected{% endif %}>Disponible</option>
-                                <option value="Fuera de Servicio" {% if v['estado'] == 'Fuera de Servicio' %}selected{% endif %}>Fuera de Servicio</option>
-                            </select>
-                        {% endif %}
+                        <label class="form-label">Estado actual</label>
+                        <div>{{ badge_estado(v['estado_visual'], v['estado_color']) }}</div>
+                        <p class="text-muted small mb-0">
+                            Se cambia con el botón Activar/Inactivo de la tabla, que pide el
+                            motivo y lo deja registrado.
+                        </p>
                     </div>
+
+                    {% if v['estado_visual'] == 'Documentos' %}
+                    <div class="alert alert-warning py-2">
+                        Tiene documentos vencidos, por eso no aparece en los formularios de
+                        asignación de rutas. Corrige las fechas marcadas en rojo.
+                    </div>
+                    {% endif %}
+                    <hr>
+                    <h6 class="text-muted mb-3">Resumen</h6>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label small text-muted mb-0">Fecha de registro</label>
+                            <div>{{ v['fecha_registro'].strftime('%d-%m-%Y') if v['fecha_registro'] else '—' }}</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label small text-muted mb-0">Fecha de inactivación</label>
+                            <div>{{ v['fecha_inactivacion'].strftime('%d-%m-%Y') if v['fecha_inactivacion'] else '—' }}</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label small text-muted mb-0">Motivo de inactivación</label>
+                            <div>{{ v['motivo_inactivacion'] or '—' }}</div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label small text-muted mb-0">Cantidad de rutas</label>
+                            <div>{{ v['total_rutas'] }}</div>
+                        </div>
+                    </div>
+                    <label class="form-label small text-muted">Historial de estado</label>
+                    {% if v['historial'] %}
+                    <ul class="list-group list-group-flush mb-0">
+                        {% for ev in v['historial'] %}
+                        <li class="list-group-item px-0 py-1">
+                            <span class="fw-bold">{{ ev['fecha_registro'].strftime('%d-%m-%Y') }}</span>
+                            <span class="badge bg-{{ 'success' if ev['accion'] == 'Reactivacion' else 'danger' }} ms-1">{{ 'Reincorporación' if ev['accion'] == 'Reactivacion' else 'Inactivación' }}</span>
+                            — {{ ev['motivo'] }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted small mb-0">Sin movimientos de estado registrados.</p>
+                    {% endif %}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-success">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- modales de cambio de estado: vehiculos -->
+{% for v in vehiculos %}
+{% set inactivando = v['estado'] != 'Fuera de Servicio' %}
+<div class="modal fade" id="modalEstadoVehiculo{{ v['id_vehiculo'] }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header {{ 'bg-danger' if inactivando else 'bg-success' }} text-white">
+                <h5 class="modal-title">
+                    {{ 'Inactivar vehículo' if inactivando else 'Activar vehículo' }} — {{ v['placa'] }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('cambiar_estado_vehiculo', id_vehiculo=v['id_vehiculo']) }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="accion" value="{{ 'inactivar' if inactivando else 'activar' }}">
+                    {% if inactivando and v['rutas_activas'] %}
+                    <div class="alert alert-warning">
+                        No se puede desactivar: tiene una ruta asignada o en curso.
+                        Finaliza o anula esa ruta primero.
+                    </div>
+                    {% endif %}
+                    <label class="form-label">
+                        Motivo {{ 'de la inactivación' if inactivando else 'de la reincorporación' }}
+                    </label>
+                    <input type="text" class="form-control" name="motivo" maxlength="300" required
+                           list="{{ 'motivosBajaVehiculo' if inactivando else 'motivosAlta' }}"
+                           placeholder="{{ 'Ej: mantenimiento, avería mecánica' if inactivando else 'Ej: reincorporación' }}">
+                    <p class="text-muted small mt-2 mb-0">
+                        Queda guardado en el historial con la fecha de hoy.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn {{ 'btn-danger' if inactivando else 'btn-success' }}">
+                        {{ 'Inactivar' if inactivando else 'Activar' }}
+                    </button>
                 </div>
             </form>
         </div>
@@ -344,7 +546,7 @@
                             <select class="form-select" name="id_vehiculo" required>
                                 {% for v in vehiculos %}
                                     <option value="{{ v['id_vehiculo'] }}" {% if v['id_vehiculo'] == e['id_vehiculo'] %}selected{% endif %}>
-                                        {{ v['placa'] }} — {{ v['modelo'] }} ({{ v['estado'] }})
+                                        {{ v['placa'] }} — {{ v['modelo'] }} ({{ v['estado_visual'] }})
                                     </option>
                                 {% endfor %}
                             </select>
@@ -357,7 +559,7 @@
                             <select class="form-select" name="id_chofer" required>
                                 {% for ch in choferes %}
                                     <option value="{{ ch['id_usuario'] }}" {% if ch['id_usuario'] == e['id_chofer'] %}selected{% endif %}>
-                                        {{ ch['nombre_completo'] }} ({{ ch['estado'] }})
+                                        {{ ch['nombre_completo'] }} ({{ ch['estado_visual'] }})
                                     </option>
                                 {% endfor %}
                             </select>

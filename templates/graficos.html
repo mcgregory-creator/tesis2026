@@ -1,0 +1,205 @@
+{% extends 'base.html' %}
+
+{% block title %}Gráficos{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-1">
+    <h2 class="mb-0">Gráficos de Productividad</h2>
+    <a href="{{ url_for('reportes_vista') }}" class="btn btn-outline-primary btn-sm">Exportar reportes PDF</a>
+</div>
+<p class="text-muted">Indicadores del año en curso, calculados con el mismo criterio que los reportes.</p>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Viajes entregados por mes</h5>
+                <canvas id="graficoViajesMes" height="230"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Estado de la flota</h5>
+                <p class="text-muted small">Vehículos por situación actual.</p>
+                <canvas id="graficoFlota" height="230"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Ganancia neta por mes ($)</h5>
+                <p class="text-muted small">Flete cobrado menos combustible, mantenimiento y gastos de ruta.</p>
+                <canvas id="graficoGanancia" height="230"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Gastos de ruta por tipo ($)</h5>
+                <p class="text-muted small">Según lo reportado por los choferes en la bitácora.</p>
+                <canvas id="graficoGastos" height="230"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Kilómetros recorridos por mes</h5>
+                <canvas id="graficoKm" height="230"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Top 5 destinos más frecuentes</h5>
+                <canvas id="graficoDestinos" height="150"></canvas>
+            </div>
+        </div>
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Top 5 choferes con más viajes</h5>
+                <canvas id="graficoChoferes" height="150"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="avisoGraficos" class="alert alert-danger d-none">
+    No se pudieron cargar las estadísticas.
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
+<script>
+    const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const AZUL = "#0d6efd", VERDE = "#198754", ROJO = "#dc3545",
+          AMARILLO = "#ffc107", CELESTE = "#0dcaf0";
+
+    // si todavia no hay datos, chart.js dibuja un lienzo vacio y confunde;
+    // mejor poner el aviso dentro del propio recuadro
+    function hayDatos(valores) {
+        return valores.some(v => Number(v) !== 0);
+    }
+
+    function vacio(idCanvas, mensaje) {
+        const canvas = document.getElementById(idCanvas);
+        const aviso = document.createElement("p");
+        aviso.className = "text-muted text-center my-4";
+        aviso.innerText = mensaje;
+        canvas.replaceWith(aviso);
+    }
+
+    function barras(idCanvas, etiquetas, valores, color, etiquetaSerie, horizontal) {
+        new Chart(document.getElementById(idCanvas), {
+            type: "bar",
+            data: {
+                labels: etiquetas,
+                datasets: [{ label: etiquetaSerie, data: valores, backgroundColor: color }],
+            },
+            options: {
+                responsive: true,
+                indexAxis: horizontal ? "y" : "x",
+                scales: { x: { beginAtZero: true }, y: { beginAtZero: true } },
+                plugins: { legend: { display: false } },
+            },
+        });
+    }
+
+    function dona(idCanvas, etiquetas, valores, colores) {
+        new Chart(document.getElementById(idCanvas), {
+            type: "doughnut",
+            data: {
+                labels: etiquetas,
+                datasets: [{ data: valores, backgroundColor: colores }],
+            },
+            options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+        });
+    }
+
+    fetch("{{ url_for('api_estadisticas') }}")
+        .then(respuesta => respuesta.json())
+        .then(datos => {
+            if (hayDatos(datos.viajes_por_mes)) {
+                barras("graficoViajesMes", MESES, datos.viajes_por_mes, AZUL, "Viajes entregados", false);
+            } else {
+                vacio("graficoViajesMes", "Aún no hay viajes entregados este año.");
+            }
+
+            // estado de la flota: mismos colores que la tabla de gestion
+            const flota = datos.estado_flota;
+            const valoresFlota = [flota.Activo, flota.Asignado, flota.Documentos, flota.Inactivo];
+            if (hayDatos(valoresFlota)) {
+                dona("graficoFlota", ["Activo", "Asignado", "Documentos", "Inactivo"],
+                     valoresFlota, [VERDE, AZUL, AMARILLO, ROJO]);
+            } else {
+                vacio("graficoFlota", "No hay vehículos registrados.");
+            }
+
+            // ganancia neta: verde si suma, rojo si el mes dio perdida
+            if (hayDatos(datos.ganancia_por_mes)) {
+                new Chart(document.getElementById("graficoGanancia"), {
+                    type: "bar",
+                    data: {
+                        labels: MESES,
+                        datasets: [{
+                            label: "Ganancia neta",
+                            data: datos.ganancia_por_mes,
+                            backgroundColor: datos.ganancia_por_mes.map(v => v < 0 ? ROJO : VERDE),
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        scales: { y: { beginAtZero: true } },
+                        plugins: { legend: { display: false } },
+                    },
+                });
+            } else {
+                vacio("graficoGanancia", "Aún no hay rutas con movimiento este año.");
+            }
+
+            const gastos = datos.gastos_por_tipo;
+            const valoresGastos = [gastos.Gasolina, gastos.Peaje, gastos.Novedad];
+            if (hayDatos(valoresGastos)) {
+                dona("graficoGastos", ["Gasolina", "Peaje", "Falla mecánica"],
+                     valoresGastos, [AZUL, CELESTE, ROJO]);
+            } else {
+                vacio("graficoGastos", "Los choferes aún no reportaron gastos.");
+            }
+
+            if (hayDatos(datos.km_por_mes)) {
+                barras("graficoKm", MESES, datos.km_por_mes, CELESTE, "Km recorridos", false);
+            } else {
+                vacio("graficoKm", "Aún no hay kilómetros registrados este año.");
+            }
+
+            if (datos.top_destinos.length) {
+                barras("graficoDestinos", datos.top_destinos.map(d => d.destino),
+                       datos.top_destinos.map(d => d.total), AZUL, "Viajes", true);
+            } else {
+                vacio("graficoDestinos", "Aún no hay viajes entregados.");
+            }
+
+            if (datos.top_choferes.length) {
+                barras("graficoChoferes", datos.top_choferes.map(c => c.nombre_completo),
+                       datos.top_choferes.map(c => c.total), VERDE, "Viajes", true);
+            } else {
+                vacio("graficoChoferes", "Aún no hay viajes entregados.");
+            }
+        })
+        .catch(() => {
+            document.getElementById("avisoGraficos").classList.remove("d-none");
+        });
+</script>
+{% endblock %}

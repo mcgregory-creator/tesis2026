@@ -121,6 +121,31 @@ def _validar_documentos_vehiculo(vehiculo):
     return True, None
 
 
+# estados que se muestran en la tabla de gestion. son calculados, no se
+# guardan: el estado manual (inactivo) manda sobre todo, despues si esta metido
+# en una ruta activa, y despues si tiene algun documento vencido. "Documentos"
+# es tecnicamente inactivo, porque los selects de asignacion de rutas ya filtran
+# a los que tienen papeles vencidos
+def _estado_visual_chofer(chofer, rutas_activas):
+    if chofer["estado"] != "Activo":
+        return "Inactivo", "danger"
+    if rutas_activas:
+        return "Asignado", "primary"
+    if not _validar_documentos_chofer(chofer)[0]:
+        return "Documentos", "warning"
+    return "Activo", "success"
+
+
+def _estado_visual_vehiculo(vehiculo, rutas_activas):
+    if vehiculo["estado"] == "Fuera de Servicio":
+        return "Inactivo", "danger"
+    if vehiculo["estado"] == "Asignado" or rutas_activas:
+        return "Asignado", "primary"
+    if not _validar_documentos_vehiculo(vehiculo)[0]:
+        return "Documentos", "warning"
+    return "Activo", "success"
+
+
 def _liberar_vehiculo(conn, id_vehiculo):
     """marca el vehiculo como disponible"""
     conn.execute(text(
@@ -432,13 +457,24 @@ def inicio():
             clientes = conn.execute(
                 text("SELECT id_cliente, razon_social FROM clientes ORDER BY razon_social")
             ).mappings().fetchall()
+            # solo entran a los selects los que realmente pueden salir a ruta:
+            # activos y con los documentos vigentes. una fecha nula tambien
+            # queda fuera (NULL >= CURRENT_DATE no es true), igual que en
+            # _documento_vigente
             vehiculos = conn.execute(
                 text("SELECT id_vehiculo, placa, modelo, km_por_litro, costo_mantenimiento_km "
-                     "FROM vehiculos WHERE estado = 'Disponible' ORDER BY placa")
+                     "FROM vehiculos WHERE estado = 'Disponible' "
+                     "  AND vencimiento_rcv >= CURRENT_DATE "
+                     "  AND vencimiento_impuesto_alcaldia >= CURRENT_DATE "
+                     "ORDER BY placa")
             ).mappings().fetchall()
             choferes = conn.execute(
                 text("SELECT id_usuario, nombre_completo FROM usuarios "
-                     "WHERE rol = 'Chofer' AND estado = 'Activo' ORDER BY nombre_completo")
+                     "WHERE rol = 'Chofer' AND estado = 'Activo' "
+                     "  AND vencimiento_licencia >= CURRENT_DATE "
+                     "  AND vencimiento_certificado_medico >= CURRENT_DATE "
+                     "  AND vencimiento_cedula >= CURRENT_DATE "
+                     "ORDER BY nombre_completo")
             ).mappings().fetchall()
             config_financiera = _obtener_configuracion_financiera(conn)
 
@@ -469,22 +505,98 @@ def inicio():
 
 
 # vistas de administracion
+def _agrupar_historial(conn, tipo_recurso):
+    """historial de activaciones/inactivaciones agrupado por id de recurso"""
+    filas = conn.execute(text(
+        "SELECT id_recurso, accion, motivo, fecha_registro "
+        "FROM historial_estado WHERE tipo_recurso = :tipo "
+        "ORDER BY fecha_registro DESC, id_historial DESC"
+    ), {"tipo": tipo_recurso}).mappings().fetchall()
+    agrupado = {}
+    for fila in filas:
+        agrupado.setdefault(fila["id_recurso"], []).append(fila)
+    return agrupado
+
+
+def _conteo_por_id(conn, sql):
+    """{id: total} a partir de una consulta que devuelve dos columnas"""
+    return {fila[0]: fila[1] for fila in conn.execute(text(sql)).fetchall()}
+
+
+def _datos_inactivacion(historial, esta_inactivo):
+    """fecha y motivo de la ultima inactivacion. si el recurso ya se reactivo,
+    la casilla queda vacia (solo aplica mientras esta inactivo)"""
+    if not esta_inactivo:
+        return None, None
+    for evento in historial:
+        if evento["accion"] == "Inactivacion":
+            return evento["fecha_registro"], evento["motivo"]
+    return None, None
+
+
 @app.route("/gestion")
 def gestion():
     solo_admin()
     with engine.connect() as conn:
-        choferes = conn.execute(text(
+        filas_choferes = conn.execute(text(
             "SELECT id_usuario, nombre_completo, usuario, vencimiento_licencia, "
-            "       vencimiento_certificado_medico, vencimiento_cedula, estado "
+            "       vencimiento_certificado_medico, vencimiento_cedula, estado, "
+            "       fecha_registro "
             "FROM usuarios WHERE rol = 'Chofer' ORDER BY nombre_completo"
         )).mappings().fetchall()
-        vehiculos = conn.execute(text(
+        filas_vehiculos = conn.execute(text(
             "SELECT id_vehiculo, placa, modelo, capacidad_carga, km_por_litro, "
             "       costo_ultimo_mantenimiento, costo_mantenimiento_km, "
             "       km_para_mantenimiento, estado, "
-            "       vencimiento_rcv, vencimiento_impuesto_alcaldia "
+            "       vencimiento_rcv, vencimiento_impuesto_alcaldia, fecha_registro "
             "FROM vehiculos ORDER BY placa"
         )).mappings().fetchall()
+
+        # rutas activas (bloquean la inactivacion) y total historico de rutas
+        activas_chofer = _conteo_por_id(conn,
+            "SELECT id_chofer, COUNT(*) FROM envios "
+            "WHERE estado_envio IN ('Pendiente', 'En Ruta') GROUP BY id_chofer")
+        activas_vehiculo = _conteo_por_id(conn,
+            "SELECT id_vehiculo, COUNT(*) FROM envios "
+            "WHERE estado_envio IN ('Pendiente', 'En Ruta') GROUP BY id_vehiculo")
+        rutas_chofer = _conteo_por_id(conn,
+            "SELECT id_chofer, COUNT(*) FROM envios "
+            "WHERE estado_envio != 'Anulado' GROUP BY id_chofer")
+        rutas_vehiculo = _conteo_por_id(conn,
+            "SELECT id_vehiculo, COUNT(*) FROM envios "
+            "WHERE estado_envio != 'Anulado' GROUP BY id_vehiculo")
+        hist_choferes = _agrupar_historial(conn, "Chofer")
+        hist_vehiculos = _agrupar_historial(conn, "Vehiculo")
+
+        choferes = []
+        for fila in filas_choferes:
+            ch = dict(fila)
+            rutas_activas = activas_chofer.get(ch["id_usuario"], 0)
+            ch["estado_visual"], ch["estado_color"] = _estado_visual_chofer(ch, rutas_activas)
+            ch["rutas_activas"] = rutas_activas
+            ch["total_rutas"] = rutas_chofer.get(ch["id_usuario"], 0)
+            ch["historial"] = hist_choferes.get(ch["id_usuario"], [])
+            ch["fecha_inactivacion"], ch["motivo_inactivacion"] = _datos_inactivacion(
+                ch["historial"], ch["estado"] != "Activo")
+            # para pintar en rojo el input del documento vencido en Detalles
+            ch["lic_vencida"] = not _documento_vigente(ch["vencimiento_licencia"])
+            ch["med_vencida"] = not _documento_vigente(ch["vencimiento_certificado_medico"])
+            ch["ced_vencida"] = not _documento_vigente(ch["vencimiento_cedula"])
+            choferes.append(ch)
+
+        vehiculos = []
+        for fila in filas_vehiculos:
+            v = dict(fila)
+            rutas_activas = activas_vehiculo.get(v["id_vehiculo"], 0)
+            v["estado_visual"], v["estado_color"] = _estado_visual_vehiculo(v, rutas_activas)
+            v["rutas_activas"] = rutas_activas
+            v["total_rutas"] = rutas_vehiculo.get(v["id_vehiculo"], 0)
+            v["historial"] = hist_vehiculos.get(v["id_vehiculo"], [])
+            v["fecha_inactivacion"], v["motivo_inactivacion"] = _datos_inactivacion(
+                v["historial"], v["estado"] == "Fuera de Servicio")
+            v["rcv_vencido"] = not _documento_vigente(v["vencimiento_rcv"])
+            v["imp_vencido"] = not _documento_vigente(v["vencimiento_impuesto_alcaldia"])
+            vehiculos.append(v)
         envios = conn.execute(text(
             "SELECT e.id_envio, e.id_cliente, e.id_vehiculo, e.id_chofer, "
             "       c.razon_social AS cliente, v.placa AS vehiculo, "
@@ -804,12 +916,9 @@ def editar_chofer(id_usuario):
     try:
         nombre_completo = request.form["nombre_completo"].strip()
         usuario_login = request.form["usuario"].strip()
-        estado = request.form.get("estado", "Activo")
         nueva_password = request.form.get("password", "").strip()
         if not nombre_completo or not usuario_login:
             raise ValueError("Nombre y usuario son obligatorios.")
-        if estado not in ("Activo", "Inactivo"):
-            raise ValueError("Estado inválido.")
         if nueva_password and len(nueva_password) < 8:
             raise ValueError("La nueva contraseña debe tener al menos 8 caracteres.")
     except (KeyError, ValueError) as error:
@@ -820,7 +929,6 @@ def editar_chofer(id_usuario):
         "id": id_usuario,
         "nombre": nombre_completo,
         "usuario": usuario_login,
-        "estado": estado,
         "lic": request.form.get("vencimiento_licencia") or None,
         "med": request.form.get("vencimiento_certificado_medico") or None,
         "ced": request.form.get("vencimiento_cedula") or None,
@@ -833,8 +941,10 @@ def editar_chofer(id_usuario):
     try:
         with engine.begin() as conn:
             resultado = conn.execute(text(
+                # el estado no se cambia aca: va por el boton Activar/Inactivar
+                # de la tabla, que exige un motivo y lo deja en el historial
                 "UPDATE usuarios SET nombre_completo = :nombre, usuario = :usuario, "
-                "estado = :estado, vencimiento_licencia = :lic, "
+                "vencimiento_licencia = :lic, "
                 "vencimiento_certificado_medico = :med, vencimiento_cedula = :ced"
                 + set_password_sql +
                 " WHERE id_usuario = :id AND rol = 'Chofer'"
@@ -861,7 +971,6 @@ def editar_vehiculo(id_vehiculo):
         km_para_mantenimiento = int(request.form["km_para_mantenimiento"])
         capacidad_raw = request.form.get("capacidad_carga", "").strip()
         capacidad_carga = float(capacidad_raw) if capacidad_raw else None
-        estado_solicitado = request.form.get("estado", "Disponible")
 
         if not placa or not modelo:
             raise ValueError("Placa y modelo son obligatorios.")
@@ -871,8 +980,6 @@ def editar_vehiculo(id_vehiculo):
             raise ValueError("Los datos de mantenimiento deben ser válidos.")
         if capacidad_carga is not None and capacidad_carga < 0:
             raise ValueError("La capacidad de carga no puede ser negativa.")
-        if estado_solicitado not in ("Disponible", "Fuera de Servicio"):
-            raise ValueError("Estado inválido.")
     except (KeyError, ValueError):
         flash("Datos del vehículo inválidos. Revisa los campos numéricos.", "danger")
         return redirect(url_for("gestion"))
@@ -887,18 +994,8 @@ def editar_vehiculo(id_vehiculo):
                 flash("El vehículo indicado no existe.", "danger")
                 return redirect(url_for("gestion"))
 
-            # "asignado" lo controla el sistema, el admin solo puede alternar
-            # disponible <-> fuera de servicio si no esta en ruta
-            estado_final = actual["estado"]
-            if actual["estado"] == "Asignado":
-                if estado_solicitado == "Fuera de Servicio":
-                    flash(
-                        "No se puede poner Fuera de Servicio un vehículo "
-                        "actualmente asignado a una ruta activa.", "warning"
-                    )
-            else:
-                estado_final = estado_solicitado
-
+            # el estado no se cambia aca: va por el boton Activar/Inactivar de
+            # la tabla, que exige un motivo y lo deja en el historial
             costo_mantenimiento_km = _costo_mantenimiento_km(costo_ultimo_mantenimiento, km_para_mantenimiento)
 
             conn.execute(text(
@@ -906,8 +1003,7 @@ def editar_vehiculo(id_vehiculo):
                 "capacidad_carga = :cap, km_por_litro = :kml, "
                 "costo_ultimo_mantenimiento = :cum, costo_mantenimiento_km = :cmk, "
                 "km_para_mantenimiento = :kmm, "
-                "vencimiento_rcv = :rcv, vencimiento_impuesto_alcaldia = :imp, "
-                "estado = :estado "
+                "vencimiento_rcv = :rcv, vencimiento_impuesto_alcaldia = :imp "
                 "WHERE id_vehiculo = :id"
             ), {
                 "placa": placa, "modelo": modelo, "cap": capacidad_carga,
@@ -916,7 +1012,7 @@ def editar_vehiculo(id_vehiculo):
                 "kmm": km_para_mantenimiento,
                 "rcv": request.form.get("vencimiento_rcv") or None,
                 "imp": request.form.get("vencimiento_impuesto_alcaldia") or None,
-                "estado": estado_final, "id": id_vehiculo,
+                "id": id_vehiculo,
             })
         flash(f"Vehículo {placa} actualizado.", "success")
     except IntegrityError:
@@ -968,6 +1064,92 @@ def cambiar_estado_usuario(id_usuario):
     else:
         flash(f"Estado actualizado a {estado_nuevo}.", "success")
     return redirect(destino)
+
+
+def _procesar_cambio_estado(tipo_recurso, id_recurso):
+    """activa/inactiva un chofer o un vehiculo. exige un motivo y lo deja
+    guardado en historial_estado. no deja inactivar si el recurso tiene una
+    ruta pendiente o en curso"""
+    accion = request.form.get("accion")
+    motivo = (request.form.get("motivo") or "").strip()
+    destino = request.referrer or url_for("gestion")
+
+    if accion not in ("inactivar", "activar"):
+        flash("Acción inválida.", "danger")
+        return redirect(destino)
+    if not motivo:
+        flash("Debes indicar el motivo para cambiar el estado.", "danger")
+        return redirect(destino)
+    motivo = motivo[:300]
+
+    if tipo_recurso == "Chofer":
+        tabla, col_id, col_ruta = "usuarios", "id_usuario", "id_chofer"
+        estado_activo, estado_inactivo = "Activo", "Inactivo"
+        etiqueta, filtro_extra = "El chofer", " AND rol = 'Chofer'"
+    else:
+        tabla, col_id, col_ruta = "vehiculos", "id_vehiculo", "id_vehiculo"
+        estado_activo, estado_inactivo = "Disponible", "Fuera de Servicio"
+        etiqueta, filtro_extra = "El vehículo", ""
+
+    inactivando = accion == "inactivar"
+    nuevo_estado = estado_inactivo if inactivando else estado_activo
+
+    try:
+        with engine.begin() as conn:
+            # se bloquea la fila para que nadie asigne una ruta justo mientras
+            # se esta inactivando
+            actual = conn.execute(text(
+                f"SELECT estado FROM {tabla} WHERE {col_id} = :id{filtro_extra} FOR UPDATE"
+            ), {"id": id_recurso}).mappings().fetchone()
+            if not actual:
+                flash(f"{etiqueta} indicado no existe.", "danger")
+                return redirect(destino)
+
+            if inactivando:
+                rutas_activas = conn.execute(text(
+                    f"SELECT COUNT(*) FROM envios WHERE {col_ruta} = :id "
+                    "AND estado_envio IN ('Pendiente', 'En Ruta')"
+                ), {"id": id_recurso}).scalar_one()
+                if rutas_activas:
+                    flash(
+                        f"No se puede desactivar: {etiqueta.lower()} tiene una ruta "
+                        "asignada o en curso. Finaliza o anula esa ruta primero.",
+                        "warning",
+                    )
+                    return redirect(destino)
+
+            conn.execute(text(
+                f"UPDATE {tabla} SET estado = :estado WHERE {col_id} = :id"
+            ), {"estado": nuevo_estado, "id": id_recurso})
+            conn.execute(text(
+                "INSERT INTO historial_estado (tipo_recurso, id_recurso, accion, motivo) "
+                "VALUES (:tipo, :id, :accion, :motivo)"
+            ), {
+                "tipo": tipo_recurso, "id": id_recurso,
+                "accion": "Inactivacion" if inactivando else "Reactivacion",
+                "motivo": motivo,
+            })
+    except SQLAlchemyError:
+        flash("No se pudo cambiar el estado.", "danger")
+        return redirect(destino)
+
+    if inactivando:
+        flash(f"{etiqueta} quedó inactivo. Motivo: {motivo}", "success")
+    else:
+        flash(f"{etiqueta} fue reincorporado. Motivo: {motivo}", "success")
+    return redirect(destino)
+
+
+@app.route("/gestion/chofer/<int:id_usuario>/estado", methods=["POST"])
+def cambiar_estado_chofer(id_usuario):
+    solo_admin()
+    return _procesar_cambio_estado("Chofer", id_usuario)
+
+
+@app.route("/gestion/vehiculo/<int:id_vehiculo>/estado", methods=["POST"])
+def cambiar_estado_vehiculo(id_vehiculo):
+    solo_admin()
+    return _procesar_cambio_estado("Vehiculo", id_vehiculo)
 
 
 @app.route("/gestion/envio/<int:id_envio>/editar", methods=["POST"])
@@ -1237,11 +1419,79 @@ def api_estadisticas():
             "GROUP BY u.nombre_completo ORDER BY total DESC LIMIT 5"
         )).mappings().fetchall()
 
+        # ganancia neta por mes (mismo criterio que el pdf mensual y el kpi
+        # del home: se excluyen las anuladas y manda la fecha de llegada)
+        filas_ganancia = conn.execute(text(
+            "SELECT EXTRACT(MONTH FROM COALESCE(e.fecha_llegada, e.fecha_creacion))::int AS mes, "
+            "       COALESCE(SUM("
+            "         e.costo_flete - e.costo_estimado_combustible "
+            "         - e.costo_estimado_mantenimiento "
+            "         - COALESCE(gastos_bitacora.gastos_ruta, 0)"
+            "       ), 0) AS total "
+            "FROM envios e "
+            "LEFT JOIN " + _SUBCONSULTA_GASTOS_RUTA + " ON gastos_bitacora.id_envio = e.id_envio "
+            "WHERE e.estado_envio != 'Anulado' "
+            "  AND EXTRACT(YEAR FROM COALESCE(e.fecha_llegada, e.fecha_creacion)) "
+            "      = EXTRACT(YEAR FROM CURRENT_DATE) "
+            "GROUP BY mes"
+        )).mappings().fetchall()
+        ganancia_por_mes = [0.0] * 12
+        for fila in filas_ganancia:
+            ganancia_por_mes[int(fila["mes"]) - 1] = round(float(fila["total"]), 2)
+
+        # kilometros recorridos por mes (solo rutas entregadas)
+        filas_km = conn.execute(text(
+            "SELECT EXTRACT(MONTH FROM COALESCE(fecha_llegada, fecha_creacion))::int AS mes, "
+            "       COALESCE(SUM(distancia_km), 0) AS total "
+            "FROM envios WHERE estado_envio = 'Entregado' "
+            "  AND EXTRACT(YEAR FROM COALESCE(fecha_llegada, fecha_creacion)) "
+            "      = EXTRACT(YEAR FROM CURRENT_DATE) "
+            "GROUP BY mes"
+        )).mappings().fetchall()
+        km_por_mes = [0.0] * 12
+        for fila in filas_km:
+            km_por_mes[int(fila["mes"]) - 1] = round(float(fila["total"]), 2)
+
+        # en que se va la plata en ruta, segun la bitacora de los choferes
+        filas_gastos = conn.execute(text(
+            "SELECT tipo_evento, COALESCE(SUM(monto_valor), 0) AS total "
+            "FROM bitacora_rutas WHERE tipo_evento IN ('Gasolina', 'Peaje', 'Novedad') "
+            "GROUP BY tipo_evento"
+        )).mappings().fetchall()
+        gastos_por_tipo = {"Gasolina": 0.0, "Peaje": 0.0, "Novedad": 0.0}
+        for fila in filas_gastos:
+            gastos_por_tipo[fila["tipo_evento"]] = round(float(fila["total"]), 2)
+
+        # composicion de la flota con los mismos estados que la tabla de gestion
+        filas_veh = conn.execute(text(
+            "SELECT id_vehiculo, estado, vencimiento_rcv, vencimiento_impuesto_alcaldia "
+            "FROM vehiculos"
+        )).mappings().fetchall()
+        activas_vehiculo = _conteo_por_id(conn,
+            "SELECT id_vehiculo, COUNT(*) FROM envios "
+            "WHERE estado_envio IN ('Pendiente', 'En Ruta') GROUP BY id_vehiculo")
+        estado_flota = {"Activo": 0, "Asignado": 0, "Documentos": 0, "Inactivo": 0}
+        for fila in filas_veh:
+            etiqueta, _ = _estado_visual_vehiculo(
+                fila, activas_vehiculo.get(fila["id_vehiculo"], 0))
+            estado_flota[etiqueta] += 1
+
     return jsonify({
         "viajes_por_mes": viajes_por_mes,
         "top_destinos": [dict(fila) for fila in top_destinos],
         "top_choferes": [dict(fila) for fila in top_choferes],
+        "ganancia_por_mes": ganancia_por_mes,
+        "km_por_mes": km_por_mes,
+        "gastos_por_tipo": gastos_por_tipo,
+        "estado_flota": estado_flota,
     })
+
+
+@app.route("/graficos")
+def graficos():
+    """pagina aparte con todos los graficos de productividad"""
+    solo_admin()
+    return render_template("graficos.html")
 
 
 # reportes en pdf: por ruta, por chofer, por mes
@@ -1365,29 +1615,58 @@ def reporte_pdf_mes():
 
 
 # arranque: carga el esquema si hace falta y crea el admin por defecto
+# migraciones idempotentes: ponen al dia una base que YA existe (la de docker o
+# la de render) sin recargar el esquema ni tocar los datos. se corren en cada
+# arranque, son baratas y no hacen nada si ya estan aplicadas
+_MIGRACIONES = [
+    "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS fecha_registro "
+    "timestamp without time zone DEFAULT CURRENT_TIMESTAMP",
+
+    "ALTER TABLE vehiculos ADD COLUMN IF NOT EXISTS fecha_registro "
+    "timestamp without time zone DEFAULT CURRENT_TIMESTAMP",
+
+    "CREATE TABLE IF NOT EXISTS historial_estado ("
+    " id_historial integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,"
+    " tipo_recurso character varying(10) NOT NULL,"
+    " id_recurso integer NOT NULL,"
+    " accion character varying(20) NOT NULL,"
+    " motivo text NOT NULL,"
+    " fecha_registro timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,"
+    " CONSTRAINT historial_estado_tipo_check"
+    "   CHECK (tipo_recurso IN ('Chofer', 'Vehiculo')),"
+    " CONSTRAINT historial_estado_accion_check"
+    "   CHECK (accion IN ('Inactivacion', 'Reactivacion')))",
+
+    "CREATE INDEX IF NOT EXISTS idx_historial_estado_recurso "
+    "ON historial_estado (tipo_recurso, id_recurso)",
+]
+
+
 def _asegurar_esquema():
     # si la base esta vacia (no existe la tabla usuarios) carga schema.sql.
     # asi una base nueva (ej. render) queda lista sin correr psql a mano.
-    # en docker el esquema ya viene horneado, aca no hace nada.
+    # despues corre las migraciones para las bases que ya existian.
     with engine.begin() as conn:
         # lock a nivel de transaccion: si arrancan varios workers de gunicorn a
-        # la vez (render usa 2), solo uno carga el esquema; el resto espera y
-        # al entrar ya encuentra las tablas.
+        # la vez (render usa 2), solo uno toca el esquema; el resto espera y
+        # al entrar ya encuentra todo hecho.
         conn.exec_driver_sql("SELECT pg_advisory_xact_lock(727274)")
         existe = conn.execute(text(
             "SELECT 1 FROM information_schema.tables "
             "WHERE table_schema = 'public' AND table_name = 'usuarios'"
         )).fetchone()
-        if existe:
-            return
-        ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
-        with open(ruta, "r", encoding="utf-8") as f:
-            conn.exec_driver_sql(f.read())
-        # el header de schema.sql (formato pg_dump) deja el search_path vacio;
-        # lo restauramos para no romper las consultas que siguen ni dejar la
-        # conexion sucia al volver al pool.
-        conn.exec_driver_sql("RESET search_path")
-        print("Esquema cargado en la base de datos (schema.sql).")
+        if not existe:
+            ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+            with open(ruta, "r", encoding="utf-8") as f:
+                conn.exec_driver_sql(f.read())
+            # el header de schema.sql (formato pg_dump) deja el search_path
+            # vacio; lo restauramos para no romper las consultas que siguen ni
+            # dejar la conexion sucia al volver al pool.
+            conn.exec_driver_sql("RESET search_path")
+            print("Esquema cargado en la base de datos (schema.sql).")
+
+        for sentencia in _MIGRACIONES:
+            conn.exec_driver_sql(sentencia)
 
 
 def inicializar_sistema():
